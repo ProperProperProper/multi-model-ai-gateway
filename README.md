@@ -1,6 +1,7 @@
 # Multi-Model AI Gateway
 
 Multi-Model AI Gateway is a native Rust AI gateway and LM Studio-style desktop web interface for Apple Silicon. It combines local MLX inference, hosted LLM endpoints, Apple Foundation Models, automatic difficulty and load routing, streaming responses, and full-access local Mac tools.
+<img width="1192" height="814" alt="Screenshot 2026-11-14 at 7 46 33 AM" src="https://github.com/user-attachments/assets/8629e105-83e4-411c-bcf4-670274923d74" />
 
 Keywords: multi-model AI gateway, Apple Silicon AI, Rust AI gateway, local LLM, hosted LLM, MLX, NVIDIA NIM API, Nemotron, free AI usage, Apple Foundation Models, OpenAI-compatible API, tool calling, agentic coding, macOS AI.
 
