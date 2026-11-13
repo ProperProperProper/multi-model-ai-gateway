@@ -67,6 +67,8 @@ Synthetic data is for smoke tests and bootstrapping only. Review it and evaluate
 
 The multi-agent orchestration workflow is documented in [skills/multi-agent-ai-lab/SKILL.md](../skills/multi-agent-ai-lab/SKILL.md). It uses the same gateway and can run the workers on free NVIDIA endpoints or local MLX.
 
+For true local KV analysis, use the standalone [MLX Sentinel](https://github.com/ProperProperProper/mlx-sentinel). It calls `mlx_lm.generate_step`, inspects real `KVCache` tensors, returns the response with KV security metadata, and can forward aggregate telemetry to Thomas AI's `/api/security/kv` endpoint. Hosted NVIDIA and Apple calls continue to use proxy telemetry because their internal KV tensors are not exposed.
+
 For MLX training, retain train/validation loss per epoch and run `python3 ai/ml/monitor.py metrics.jsonl`. If validation loss worsens while training loss improves, stop and restore the best validation checkpoint. Increase data diversity before increasing model size or training steps.
 
 ## Data contract

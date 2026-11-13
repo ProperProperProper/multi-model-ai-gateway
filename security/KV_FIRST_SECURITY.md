@@ -73,11 +73,11 @@ Example:
   "cache_tokens": 512,
   "mean_norm": 1.2,
   "max_norm": 4.1,
-  "attention_entropy": 0.8
+  "attention_entropy": null
 }
 ```
 
-The current guard learns a baseline for `mean_norm`, flags large norm outliers, and rejects invalid entropy values. This endpoint accepts aggregate telemetry only; it is not a raw tensor upload API.
+The current guard learns a baseline for `mean_norm`, flags large norm outliers, and rejects invalid entropy values when supplied. The standalone [MLX Sentinel](https://github.com/ProperProperProper/mlx-sentinel) exposes real `mlx_lm.KVCache` statistics and can forward only aggregate telemetry here. It currently reports `null` for attention entropy because `mlx_lm` exposes KV tensors but not attention probability matrices. This endpoint accepts aggregate telemetry only; it is not a raw tensor upload API.
 
 ## Operating modes
 

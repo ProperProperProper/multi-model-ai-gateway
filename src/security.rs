@@ -57,7 +57,7 @@ pub struct KvTelemetry {
     pub cache_tokens: f64,
     pub mean_norm: f64,
     pub max_norm: f64,
-    pub attention_entropy: f64,
+    pub attention_entropy: Option<f64>,
 }
 
 impl SecurityGuard {
@@ -206,7 +206,10 @@ impl SecurityGuard {
             score += 0.3;
             reasons.push("kv-max-norm-outlier".into());
         }
-        if !telemetry.attention_entropy.is_finite() {
+        if telemetry
+            .attention_entropy
+            .is_some_and(|value| !value.is_finite())
+        {
             score += 0.8;
             reasons.push("kv-invalid-entropy".into());
         }
