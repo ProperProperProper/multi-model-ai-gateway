@@ -24,7 +24,7 @@ TEMPLATES = {
         "Design a robust distributed training pipeline with failure recovery.",
         "Prove whether this concurrency strategy is safe under load.",
         "Refactor this large system and identify hidden performance risks.",
-        "Analyze the backtest methodology and challenge its assumptions.",
+        "Analyze the evaluation methodology and challenge its assumptions.",
         "Optimize this architecture for difficult multi-stage reasoning.",
         "Evaluate competing approaches and recommend one with evidence.",
     ],

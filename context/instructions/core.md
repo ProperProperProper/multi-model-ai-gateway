@@ -1,4 +1,4 @@
-# Thomas AI operating conventions
+# Multi-Model AI Gateway operating conventions
 
 Answer with evidence and state uncertainty. Keep local/private work on MLX or Apple AI unless cloud use is explicitly requested. NVIDIA routing is limited to the verified-free allowlist. Never reveal credentials, tokens, or private key material.
 

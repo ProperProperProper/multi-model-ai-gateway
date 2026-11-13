@@ -53,7 +53,7 @@
 {"prompt": "Evaluate competing approaches and recommend one with evidence. Sample scenario 53: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Create a friendly accessibility-focused rewrite. Sample scenario 54: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Run the local test suite and report the result. Sample scenario 55: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
-{"prompt": "Analyze the backtest methodology and challenge its assumptions. Sample scenario 56: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
+{"prompt": "Analyze the evaluation methodology and challenge its assumptions. Sample scenario 56: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Create a friendly accessibility-focused rewrite. Sample scenario 57: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Write a small local script to rename these files. Sample scenario 58: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Refactor this large system and identify hidden performance risks. Sample scenario 59: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
@@ -65,7 +65,7 @@
 {"prompt": "Optimize this architecture for difficult multi-stage reasoning. Sample scenario 65: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Suggest a concise Apple platform API design. Sample scenario 66: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Write a small local script to rename these files. Sample scenario 67: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
-{"prompt": "Analyze the backtest methodology and challenge its assumptions. Sample scenario 68: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
+{"prompt": "Analyze the evaluation methodology and challenge its assumptions. Sample scenario 68: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Rewrite this note using Apple-native writing assistance. Sample scenario 69: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Write a small local script to rename these files. Sample scenario 70: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Compare several model architectures and derive the trade-offs. Sample scenario 71: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
@@ -74,7 +74,7 @@
 {"prompt": "Refactor this large system and identify hidden performance risks. Sample scenario 74: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Summarize this text privately with the Apple Foundation Model. Sample scenario 75: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Write a small local script to rename these files. Sample scenario 76: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
-{"prompt": "Analyze the backtest methodology and challenge its assumptions. Sample scenario 77: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
+{"prompt": "Analyze the evaluation methodology and challenge its assumptions. Sample scenario 77: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Turn this rough sentence into a polished message on macOS. Sample scenario 78: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Execute the command and show its bounded output. Sample scenario 79: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Optimize this architecture for difficult multi-stage reasoning. Sample scenario 80: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
@@ -86,7 +86,7 @@
 {"prompt": "Refactor this large system and identify hidden performance risks. Sample scenario 86: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Explain the on-device versus Private Cloud Apple AI path. Sample scenario 87: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Open the local config and check its formatting. Sample scenario 88: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
-{"prompt": "Analyze the backtest methodology and challenge its assumptions. Sample scenario 89: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
+{"prompt": "Analyze the evaluation methodology and challenge its assumptions. Sample scenario 89: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Turn this rough sentence into a polished message on macOS. Sample scenario 90: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Run the local test suite and report the result. Sample scenario 91: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Evaluate competing approaches and recommend one with evidence. Sample scenario 92: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
@@ -104,7 +104,7 @@
 {"prompt": "Compare several model architectures and derive the trade-offs. Sample scenario 104: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Summarize this text privately with the Apple Foundation Model. Sample scenario 105: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Inspect the Git diff and explain the changed functions. Sample scenario 106: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
-{"prompt": "Analyze the backtest methodology and challenge its assumptions. Sample scenario 107: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
+{"prompt": "Analyze the evaluation methodology and challenge its assumptions. Sample scenario 107: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Summarize this text privately with the Apple Foundation Model. Sample scenario 108: preserve safety and explain the result.", "provider": "apple", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Inspect the Git diff and explain the changed functions. Sample scenario 109: preserve safety and explain the result.", "provider": "local", "source": "synthetic-router-v1", "review_required": true}
 {"prompt": "Optimize this architecture for difficult multi-stage reasoning. Sample scenario 110: preserve safety and explain the result.", "provider": "nvidia", "source": "synthetic-router-v1", "review_required": true}

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Train and use a tiny softmax router for Thomas AI.
+"""Train and use a tiny softmax router for Multi-Model AI Gateway.
 
 The router predicts local, NVIDIA, or Apple from prompt features. It is a
-small learned policy layer; Thomas AI still applies health checks and load
+small learned policy layer; Multi-Model AI Gateway still applies health checks and load
 balancing after the prediction.
 """
 from __future__ import annotations
@@ -147,7 +147,7 @@ def train(rows: Iterable[dict], epochs: int = 600, learning_rate: float = 0.35, 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train or query the Thomas AI learned router")
+    parser = argparse.ArgumentParser(description="Train or query the Multi-Model AI Gateway learned router")
     sub = parser.add_subparsers(dest="command", required=True)
     train_parser = sub.add_parser("train")
     train_parser.add_argument("dataset", type=Path)

@@ -1,16 +1,16 @@
-# Thomas AI: NVIDIA LLMs, MLX, and Apple AI Services
+# Multi-Model AI Gateway
 
-Thomas AI is a native Rust AI gateway and LM Studio-style desktop web interface for Apple Silicon. It combines local MLX inference, free NVIDIA hosted LLM endpoints, Apple Foundation Models, automatic difficulty and load routing, streaming responses, and full-access local Mac tools.
+Multi-Model AI Gateway is a native Rust AI gateway and LM Studio-style desktop web interface for Apple Silicon. It combines local MLX inference, hosted LLM endpoints, Apple Foundation Models, automatic difficulty and load routing, streaming responses, and full-access local Mac tools.
 
-Keywords: Apple Silicon AI, Rust AI gateway, MLX, NVIDIA NIM API, Nemotron, free NVIDIA LLMs, Apple Foundation Models, local LLM, OpenAI-compatible API, EXO, RDMA, tool calling, agentic coding, macOS AI.
+Keywords: multi-model AI gateway, Apple Silicon AI, Rust AI gateway, local LLM, hosted LLM, MLX, NVIDIA NIM API, Nemotron, free AI usage, Apple Foundation Models, OpenAI-compatible API, tool calling, agentic coding, macOS AI.
 
-Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](https://properproperproper.github.io/thomas-ai-nvidia-llms-mlx-apple-ai-services/)
+Article: [How the Multi-Model AI Gateway combines local and hosted AI](https://properproperproper.github.io/thomas-ai-nvidia-llms-mlx-apple-ai-services/)
 
 ## Features
 
 - Native Rust gateway optimized for Apple Silicon.
 - MLX-LM local inference with automatic launchd service management.
-- NVIDIA hosted routing restricted to catalog-verified free endpoints.
+- Hosted routing restricted to catalog-verified free endpoints where configured.
 - Nemotron as the default NVIDIA model, with difficulty-aware model selection.
 - Load-aware routing using current local and NVIDIA in-flight requests.
 - OpenAI-compatible `/v1/chat/completions` and `/v1/models` endpoints.
@@ -37,7 +37,6 @@ Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](h
 - [Operations, launchd, and troubleshooting](docs/OPERATIONS.md)
 - [Testing and verification](docs/TESTING.md)
 - [Apple AI bridge](apple-ai-bridge/README.md)
-- [Shared trading adapters](ADAPTERS.md)
 - [Multi-agent AI lab](skills/multi-agent-ai-lab/SKILL.md)
 - [Context engineering and local graph](context/README.md)
 - [Security guard](security/README.md)
@@ -47,13 +46,13 @@ Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](h
 
 ```sh
 cargo build --release
-./target/release/thomas-ai serve
+./target/release/multi-model-gateway serve
 open http://127.0.0.1:8788
 ```
 
-For persistent local services, use the launchd scripts in the parent project or configure your own LaunchAgent. The gateway reads the NVIDIA key from Keychain service `NVIDIA_API_KEY`, account `local.local`, by default. No key is stored in this repository.
+For persistent local services, configure your own LaunchAgent or run the gateway directly. The gateway reads the NVIDIA key from Keychain service `NVIDIA_API_KEY`, account `local.local`, by default. No key is stored in this repository.
 
-The current machine deployment runs the private release binary through `com.thomas-ai.gateway` and runs MLX through `com.thomas-ai.mlx`. The launchd definitions live in `~/Library/LaunchAgents`; machine-specific absolute paths are intentionally kept outside this repository.
+The gateway can run as a standalone release binary. For persistent services, use the service manager appropriate to your operating system.
 
 ## API examples
 
@@ -70,24 +69,24 @@ curl -N http://127.0.0.1:8788/v1/chat/completions \
 
 ## Local Graphify-style subsystem
 
-Thomas builds a deterministic local graph of the configured repository in Rust. It indexes source, documentation, configuration, and SQL files while excluding Git metadata, build directories, virtual environments, lab artifacts, and credential-like files. The graph contains files, functions/classes/structs/enums/traits, dependencies, imports, definitions, and approximate call relationships.
+The gateway builds a deterministic local graph of the configured repository in Rust. It indexes source, documentation, configuration, and SQL files while excluding Git metadata, build directories, virtual environments, lab artifacts, and credential-like files. The graph contains files, functions/classes/structs/enums/traits, dependencies, imports, definitions, and approximate call relationships.
 
 CLI:
 
 ```sh
-thomas-ai graph scan
-thomas-ai graph query --query security
+multi-model-gateway graph scan
+multi-model-gateway graph query --query security
 ```
 
-The scan writes `graphify-out/graph.json`, `graphify-out/GRAPH_REPORT.md`, and `graphify-out/graph.html` locally. The running gateway exposes `GET /api/graph`, `POST /api/graph/query`, `GET /api/graph/report`, and `GET /graph.html`. Thomas uses the graph as bounded repository context for future subagent research and code review; it does not upload source code or require a vector database.
+The scan writes `graphify-out/graph.json`, `graphify-out/GRAPH_REPORT.md`, and `graphify-out/graph.html` locally. The running gateway exposes `GET /api/graph`, `POST /api/graph/query`, `GET /api/graph/report`, and `GET /graph.html`. The gateway uses the graph as bounded repository context for subagent research and code review; it does not upload source code or require a vector database.
 
 ## NVIDIA free endpoints
 
-Thomas AI uses an explicit allowlist so arbitrary models returned by NVIDIA cannot be selected accidentally. The default route is Nemotron 3.5 Lightning, easy requests use Nemotron 3.5 Bolt, and difficult requests use DeepSeek V4.1 Flash. The allowlist can be narrowed with `NVIDIA_FREE_MODELS`; it cannot be expanded beyond the verified list in the source.
+The gateway uses an explicit allowlist so arbitrary models returned by NVIDIA cannot be selected accidentally. The default route is Nemotron 3.5 Lightning, easy requests use Nemotron 3.5 Bolt, and difficult requests use DeepSeek V4.1 Flash. The allowlist can be narrowed with `NVIDIA_FREE_MODELS`; it cannot be expanded beyond the verified list in the source.
 
 ## Full-access warning
 
-Full-access mode is intentional: the agent can read and write local files and run shell commands as the logged-in macOS user. Run Thomas AI only on a machine and account where this behavior is acceptable. The gateway binds to loopback by default.
+Full-access mode is intentional: the agent can read and write local files and run shell commands as the logged-in user. Run the gateway only on a machine and account where this behavior is acceptable. The gateway binds to loopback by default.
 
 ## Development
 

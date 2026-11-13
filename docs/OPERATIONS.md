@@ -4,7 +4,7 @@
 
 | Endpoint | Purpose |
 | --- | --- |
-| `http://127.0.0.1:8788/` | Thomas AI web UI |
+| `http://127.0.0.1:8788/` | Multi-Model AI Gateway web UI |
 | `/health` | Gateway liveness |
 | `/api/status` | Backend health, routing, access mode, and GitHub status |
 | `/metrics` | Prometheus-compatible counters and latency gauges |
@@ -14,21 +14,20 @@
 
 ## Persistent services
 
-The reference macOS deployment uses:
+For a local macOS deployment, configure:
 
-- `com.thomas-ai.gateway`: `/Users/local.local/Library/LaunchAgents/com.thomas-ai.gateway.plist`
-- `com.thomas-ai.mlx`: the MLX LaunchAgent in the parent TradingSystem project
-- gateway startup: `/Users/local.local/Projects/TradingSystem/scripts/start_thomas_ai.sh`
-- MLX startup: `/Users/local.local/Projects/TradingSystem/scripts/start_thomas_mlx.sh`
-- logs: `/Users/local.local/Projects/TradingSystem/logs/thomas-ai.{log,err}` and `thomas-mlx.{log,err}`
+- `com.multi-model-ai-gateway.gateway`: `/Users/local.local/Library/LaunchAgents/com.multi-model-ai-gateway.gateway.plist`
+- `com.multi-model-ai-gateway.mlx`: an MLX service configured for your machine
+- gateway startup: `./target/release/multi-model-gateway serve`
+- logs: configure stdout and stderr paths in your service manager
 
 Check or restart them:
 
 ```sh
-launchctl print gui/$(id -u)/com.thomas-ai.gateway
-launchctl print gui/$(id -u)/com.thomas-ai.mlx
-launchctl kickstart -k gui/$(id -u)/com.thomas-ai.mlx
-launchctl kickstart -k gui/$(id -u)/com.thomas-ai.gateway
+launchctl print gui/$(id -u)/com.multi-model-ai-gateway.gateway
+launchctl print gui/$(id -u)/com.multi-model-ai-gateway.mlx
+launchctl kickstart -k gui/$(id -u)/com.multi-model-ai-gateway.mlx
+launchctl kickstart -k gui/$(id -u)/com.multi-model-ai-gateway.gateway
 ```
 
 ## Key handling
@@ -46,8 +45,8 @@ macOS Keychain account: local.local
 
 If `/v1/models` works but a completion hangs:
 
-1. inspect `logs/thomas-mlx.err` for model-load errors;
-2. restart `com.thomas-ai.mlx`;
+1. inspect `logs/gateway-mlx.err` for model-load errors;
+2. restart `com.multi-model-ai-gateway.mlx`;
 3. wait for `/v1/models` to return the configured model;
 4. test `/v1/chat/completions` directly on port 8080;
 5. retest the gateway on port 8788.
@@ -60,7 +59,7 @@ Check `/api/status` and `/metrics`. NVIDIA health is cached briefly to avoid ham
 
 ## Learned router deployment
 
-Train and validate a router outside the gateway, then set `THOMAS_ROUTER_MODEL` in the gateway launch environment. `/api/status` reports `learned_router: true` when the file loaded successfully. Remove the variable to return to the built-in difficulty heuristic. Never deploy a model trained on secrets or private customer data into a shared repository.
+Train and validate a router outside the gateway, then set `MULTI_MODEL_GATEWAY_ROUTER_MODEL` in the gateway launch environment. `/api/status` reports `learned_router: true` when the file loaded successfully. Remove the variable to return to the built-in difficulty heuristic. Never deploy a model trained on secrets or private customer data into a shared repository.
 
 ## Apple failures
 

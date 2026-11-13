@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "ThomasAppleAI",
+    name: "MultiModelAppleAI",
     platforms: [.macOS(.v27)],
-    products: [.executable(name: "thomas-apple-ai", targets: ["ThomasAppleAI"])],
-    targets: [.executableTarget(name: "ThomasAppleAI")]
+    products: [.executable(name: "multi-model-apple-ai", targets: ["MultiModelAppleAI"])],
+    targets: [.executableTarget(name: "MultiModelAppleAI")]
 )
 

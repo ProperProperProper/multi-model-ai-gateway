@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Minimal stdio MCP server for Thomas AI.
+"""Minimal stdio MCP server for Multi-Model AI Gateway.
 
-The server never handles provider credentials. It calls the local Thomas AI
+The server never handles provider credentials. It calls the local Multi-Model AI Gateway
 gateway, which enforces the verified-free NVIDIA allowlist, local MLX routing,
 health checks, and full-access policy.
 """
@@ -12,7 +12,7 @@ import os
 import sys
 from urllib.request import Request, urlopen
 
-GATEWAY = os.environ.get("THOMAS_GATEWAY_URL", "http://127.0.0.1:8788").rstrip("/")
+GATEWAY = os.environ.get("MULTI_MODEL_GATEWAY_URL", "http://127.0.0.1:8788").rstrip("/")
 PROVIDERS = {"auto", "local", "nvidia", "apple"}
 
 
@@ -33,10 +33,10 @@ def result(text: str, structured: dict | None = None) -> dict:
 
 
 def call_tool(name: str, arguments: dict) -> dict:
-    if name == "thomas_health":
+    if name == "gateway_health":
         status = http_json("/api/status")
         return result(json.dumps(status), status)
-    if name == "thomas_chat":
+    if name == "gateway_chat":
         prompt = str(arguments.get("prompt", "")).strip()
         provider = str(arguments.get("provider", "nvidia"))
         if not prompt:
@@ -52,8 +52,8 @@ def call_tool(name: str, arguments: dict) -> dict:
         response = http_json("/v1/chat/completions", payload)
         message = response.get("choices", [{}])[0].get("message", {})
         text = message.get("content") or message.get("reasoning_content") or json.dumps(response)
-        return result(text, {"text": text, "routing": response.get("_thomas_ai", {}), "model": response.get("model")})
-    if name == "thomas_router_sample":
+        return result(text, {"text": text, "routing": response.get("_multi_model_gateway", {}), "model": response.get("model")})
+    if name == "gateway_router_sample":
         return result(json.dumps({"prompt": arguments.get("prompt", ""), "provider": arguments.get("provider", "nvidia"), "source": "mcp-sample"}))
     raise ValueError(f"unknown tool: {name}")
 
@@ -62,14 +62,14 @@ def handle(request: dict) -> dict | None:
     request_id = request.get("id")
     method = request.get("method")
     if method == "initialize":
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "thomas-ai-mcp", "version": "1.0.0"}}}
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "multi-model-ai-gateway-mcp", "version": "1.0.0"}}}
     if method == "notifications/initialized":
         return None
     if method == "tools/list":
         tools = [
-            {"name": "thomas_health", "description": "Inspect Thomas AI gateway, MLX, Apple, and NVIDIA status.", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "thomas_chat", "description": "Chat through Thomas AI. NVIDIA is constrained by the gateway to verified free endpoints; local selects MLX.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
-            {"name": "thomas_router_sample", "description": "Create a reviewable routing-example record; it does not train or deploy anything.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS)}}}},
+            {"name": "gateway_health", "description": "Inspect Multi-Model AI Gateway gateway, MLX, Apple, and NVIDIA status.", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "gateway_chat", "description": "Chat through Multi-Model AI Gateway. NVIDIA is constrained by the gateway to verified free endpoints; local selects MLX.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
+            {"name": "gateway_router_sample", "description": "Create a reviewable routing-example record; it does not train or deploy anything.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS)}}}},
         ]
         return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools}}
     if method == "tools/call":

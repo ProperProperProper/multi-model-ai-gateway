@@ -1,4 +1,4 @@
-# Observability adapters
+# Observability
 
-Structured logs, latency metrics, order metrics, data-quality signals, model timing, and strategy diagnostics with consistent field names across projects.
+Structured logs, latency metrics, model timing, backend health, routing outcomes, and security signals with consistent field names across the gateway.
 

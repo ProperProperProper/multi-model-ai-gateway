@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Use Thomas AI's verified-free NVIDIA route to bootstrap ML datasets.
+"""Use Multi-Model AI Gateway's verified-free NVIDIA route to bootstrap ML datasets.
 
 The gateway, not this script, owns credentials and the NVIDIA free-model
 allowlist. Generated labels are marked for human review and are never deployed

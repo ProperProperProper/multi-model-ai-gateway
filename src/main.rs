@@ -49,7 +49,10 @@ const VERIFIED_FREE_NVIDIA_MODELS: &[&str] = &[
 const DASHBOARD: &str = include_str!("ui.html");
 
 #[derive(Parser, Debug)]
-#[command(name = "thomas-ai", about = "Thomas AI for Apple Silicon")]
+#[command(
+    name = "multi-model-gateway",
+    about = "Multi-Model AI Gateway for Apple Silicon"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -221,23 +224,38 @@ fn config(provider: String) -> Config {
     } else {
         NVIDIA_HARD_MODEL.into()
     };
+    let local_url = env::var("MLX_BASE_URL").unwrap_or_else(|_| LOCAL_URL.into());
+    let local_url = if local_url.starts_with("http://127.0.0.1:")
+        || local_url.starts_with("http://localhost:")
+        || local_url.starts_with("http://[::1]:")
+    {
+        local_url.trim_end_matches('/').into()
+    } else {
+        LOCAL_URL.into()
+    };
+    let nvidia_url = env::var("NVIDIA_BASE_URL").unwrap_or_else(|_| NVIDIA_URL.into());
+    let nvidia_url = if nvidia_url == NVIDIA_URL {
+        nvidia_url
+    } else {
+        NVIDIA_URL.into()
+    };
     Config {
         provider,
-        local_url: env::var("MLX_BASE_URL")
-            .unwrap_or_else(|_| LOCAL_URL.into())
-            .trim_end_matches('/')
-            .into(),
-        nvidia_url: env::var("NVIDIA_BASE_URL")
-            .unwrap_or_else(|_| NVIDIA_URL.into())
-            .trim_end_matches('/')
-            .into(),
+        local_url,
+        nvidia_url,
         local_model: env::var("MLX_MODEL").unwrap_or_default(),
         nvidia_model: safe_default,
         nvidia_fast_model: safe_fast,
         nvidia_hard_model: safe_hard,
         nvidia_free_models: configured_free,
-        apple_bin: env::var("THOMAS_APPLE_AI_BIN").unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem/thomas-ai-trading-core/apple-ai-bridge/.build/release/thomas-apple-ai".into()),
-        apple_mode: env::var("THOMAS_APPLE_AI_MODE").unwrap_or_else(|_| "private_cloud".into()),
+        apple_bin: env::var("MULTI_MODEL_GATEWAY_APPLE_AI_BIN").unwrap_or_else(|_| {
+            format!(
+                "{}/apple-ai-bridge/.build/release/multi-model-apple-ai",
+                env!("CARGO_MANIFEST_DIR")
+            )
+        }),
+        apple_mode: env::var("MULTI_MODEL_GATEWAY_APPLE_AI_MODE")
+            .unwrap_or_else(|_| "private_cloud".into()),
         local_max_difficulty: env::var("AI_LOCAL_MAX_DIFFICULTY")
             .ok()
             .and_then(|v| v.parse().ok())
@@ -246,7 +264,7 @@ fn config(provider: String) -> Config {
 }
 
 fn load_router_model() -> Option<RouterModel> {
-    let path = env::var("THOMAS_ROUTER_MODEL").ok()?;
+    let path = env::var("MULTI_MODEL_GATEWAY_ROUTER_MODEL").ok()?;
     let bytes = fs::read(path).ok()?;
     let model: RouterModel = serde_json::from_slice(&bytes).ok()?;
     let valid_classes = model
@@ -441,8 +459,6 @@ fn difficulty(req: &ChatRequest) -> u8 {
         "design",
         "optimize",
         "quantitative",
-        "backtest",
-        "strategy",
         "risk analysis",
         "compare",
         "trade-off",
@@ -536,7 +552,7 @@ async fn apple_healthy(state: &AppState) -> bool {
 }
 
 fn github_status() -> Value {
-    let root = env::var("THOMAS_REPO_ROOT")
+    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
         .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
     let remote = Command::new("git")
         .args(["-C", &root, "remote", "get-url", "origin"])
@@ -580,13 +596,13 @@ fn workspace_context(req: &ChatRequest) -> Option<String> {
         return None;
     }
 
-    let root = env::var("THOMAS_REPO_ROOT")
+    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
         .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
     let projects = std::path::Path::new(&root)
         .parent()
         .unwrap_or_else(|| std::path::Path::new(&root));
     let mut context = format!(
-        "Thomas AI Full Access workspace context. The user asked about local files.\nRepository root: {root}\nProjects directory entries:\n"
+        "Multi-Model AI Gateway full-access workspace context. The user asked about local files.\nRepository root: {root}\nProjects directory entries:\n"
     );
     if let Ok(entries) = fs::read_dir(projects) {
         let mut names = entries
@@ -629,32 +645,61 @@ fn workspace_context(req: &ChatRequest) -> Option<String> {
 
 fn agent_enabled(req: &ChatRequest) -> bool {
     matches!(&req.extra_body, Some(Value::Object(extra)) if extra.get("agent").and_then(Value::as_bool).unwrap_or(false))
+        && env::var("MULTI_MODEL_GATEWAY_ENABLE_AGENT_TOOLS")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+}
+
+fn capability_enabled(name: &str) -> bool {
+    env::var(name)
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 fn agent_tools() -> Value {
-    json!([
-        {"type":"function","function":{"name":"list_directory","description":"List a local directory. Use for inspecting projects and files.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}},
-        {"type":"function","function":{"name":"read_file","description":"Read a UTF-8 text file from the local Mac.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}},
-        {"type":"function","function":{"name":"write_file","description":"Write or update a UTF-8 text file on the local Mac.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}}},
-        {"type":"function","function":{"name":"run_command","description":"Run a shell command as the logged-in user in the TradingSystem workspace.","parameters":{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"}},"required":["command"]}}},
-        {"type":"function","function":{"name":"git_status","description":"Inspect Git status and the configured GitHub remote.","parameters":{"type":"object","properties":{}}}},
-        {"type":"function","function":{"name":"spawn_subagent","description":"Delegate one bounded research, implementation, or code-review task and receive a report. Subagents cannot spawn more agents.","parameters":{"type":"object","properties":{"role":{"type":"string","enum":["research","implementation","code_review"]},"task":{"type":"string"},"provider":{"type":"string","enum":["local","nvidia","apple"]}},"required":["role","task"]}}}
-    ])
+    let mut tools = vec![
+        json!({"type":"function","function":{"name":"list_directory","description":"List a local directory inside MULTI_MODEL_GATEWAY_REPO_ROOT.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}}),
+        json!({"type":"function","function":{"name":"read_file","description":"Read a UTF-8 text file inside MULTI_MODEL_GATEWAY_REPO_ROOT.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}}),
+        json!({"type":"function","function":{"name":"git_status","description":"Inspect the configured GitHub remote.","parameters":{"type":"object","properties":{}}}}),
+        json!({"type":"function","function":{"name":"spawn_subagent","description":"Delegate one bounded task. Explicit agent capability is enabled.","parameters":{"type":"object","properties":{"role":{"type":"string","enum":["research","implementation","code_review"]},"task":{"type":"string"},"provider":{"type":"string","enum":["local","nvidia","apple"]}},"required":["role","task"]}}}),
+    ];
+    if capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_FILE_WRITES") {
+        tools.push(json!({"type":"function","function":{"name":"write_file","description":"Write a UTF-8 text file inside MULTI_MODEL_GATEWAY_REPO_ROOT.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}}}));
+    }
+    if capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_COMMANDS") {
+        tools.push(json!({"type":"function","function":{"name":"run_command","description":"Run a reviewed, non-network shell command inside MULTI_MODEL_GATEWAY_REPO_ROOT.","parameters":{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"}},"required":["command"]}}}));
+    }
+    Value::Array(tools)
 }
 
 fn allowed_path(path: &str) -> std::path::PathBuf {
-    let root = env::var("THOMAS_REPO_ROOT")
+    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
         .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
     let requested = std::path::Path::new(path);
-    if requested.is_absolute() {
+    let root = std::path::Path::new(&root)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(root));
+    let candidate = if requested.is_absolute() {
         requested.to_path_buf()
     } else {
-        std::path::Path::new(&root).join(requested)
+        root.join(requested)
+    };
+    let checked = if candidate.exists() {
+        candidate.canonicalize().ok()
+    } else {
+        candidate
+            .parent()
+            .and_then(|parent| parent.canonicalize().ok())
+            .map(|parent| parent.join(candidate.file_name().unwrap_or_default()))
+    };
+    match checked {
+        Some(path) if path.starts_with(&root) => path,
+        _ => root.join("__DENIED_OUTSIDE_WORKSPACE__"),
     }
 }
 
 fn execute_tool_sync(name: &str, args: &Value) -> String {
-    let root = env::var("THOMAS_REPO_ROOT")
+    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
         .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
     match name {
         "list_directory" => {
@@ -682,7 +727,13 @@ fn execute_tool_sync(name: &str, args: &Value) -> String {
             }
         }
         "write_file" => {
+            if !capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_FILE_WRITES") {
+                return "write_file denied: file-write capability is disabled".into();
+            }
             let path = allowed_path(args.get("path").and_then(Value::as_str).unwrap_or(""));
+            if path.ends_with("__DENIED_OUTSIDE_WORKSPACE__") {
+                return "write_file denied: path is outside MULTI_MODEL_GATEWAY_REPO_ROOT".into();
+            }
             let content = args.get("content").and_then(Value::as_str).unwrap_or("");
             if path.extension().and_then(|ext| ext.to_str()) == Some("key")
                 || path
@@ -741,15 +792,59 @@ async fn execute_tool(name: &str, args: &Value) -> String {
     if name != "run_command" {
         return execute_tool_sync(name, args);
     }
-    let root = env::var("THOMAS_REPO_ROOT")
+    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
         .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
+    if !capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_COMMANDS") {
+        return "run_command denied: shell capability is disabled".into();
+    }
     let command = args.get("command").and_then(Value::as_str).unwrap_or("");
+    let lower = command.to_lowercase();
+    if [
+        "curl",
+        "wget",
+        "nc ",
+        "ssh ",
+        "scp ",
+        "security ",
+        "keychain",
+        "launchctl",
+        "rm -rf",
+        ">/",
+        "| sh",
+        "| bash",
+    ]
+    .iter()
+    .any(|term| lower.contains(term))
+    {
+        return "run_command denied: network, credential, destructive, or shell-pipeline command"
+            .into();
+    }
+    if lower.contains("git push") || lower.contains("git pull") || lower.contains("git fetch") {
+        let remote = Command::new("git")
+            .args(["-C", &root, "remote", "get-url", "origin"])
+            .output();
+        let remote = remote
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).to_lowercase())
+            .unwrap_or_default();
+        let github = remote.starts_with("https://github.com/")
+            || remote.starts_with("https://www.github.com/")
+            || remote.starts_with("git@github.com:")
+            || remote.starts_with("ssh://git@github.com/");
+        if !github {
+            return "run_command denied: git sync is allowed only for a GitHub origin".into();
+        }
+    }
     let cwd = args
         .get("cwd")
         .and_then(Value::as_str)
         .map(allowed_path)
         .unwrap_or_else(|| std::path::Path::new(&root).to_path_buf());
-    let seconds = env::var("THOMAS_TOOL_TIMEOUT")
+    if cwd.ends_with("__DENIED_OUTSIDE_WORKSPACE__") {
+        return "run_command denied: cwd is outside MULTI_MODEL_GATEWAY_REPO_ROOT".into();
+    }
+    let seconds = env::var("MULTI_MODEL_GATEWAY_TOOL_TIMEOUT")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(120);
@@ -823,7 +918,7 @@ async fn execute_subagent(state: &AppState, args: &Value) -> String {
     };
     let bounded = task.chars().take(12_000).collect::<String>();
     let system = format!(
-        "You are Thomas AI's bounded {role} subagent. Do not call tools or spawn agents. Return a report with role, assumptions, evidence, files inspected, proposed changes, tests, and risks. Do not claim actions you did not perform."
+        "You are a bounded Multi-Model AI Gateway {role} subagent. Do not call tools or spawn agents. Return a report with role, assumptions, evidence, files inspected, proposed changes, tests, and risks. Do not claim actions you did not perform."
     );
     let payload = json!({"model":"auto","messages":[{"role":"system","content":system},{"role":"user","content":bounded}],"max_tokens":1200});
     match call_upstream(state, provider, payload, None).await {
@@ -930,7 +1025,7 @@ async fn call_apple(state: &AppState, req: Value) -> Result<Value, String> {
                 .join("\n")
         })
         .unwrap_or_default();
-    let request = json!({"prompt":prompt,"mode":state.cfg.apple_mode,"instructions":"You are Thomas AI's Apple-native application-development assistant. Give concise, technically useful answers. Do not claim access to local tools unless they are explicitly provided by the gateway."});
+    let request = json!({"prompt":prompt,"mode":state.cfg.apple_mode,"instructions":"You are Multi-Model AI Gateway's Apple-native application-development assistant. Give concise, technically useful answers. Do not claim access to local tools unless they are explicitly provided by the gateway."});
     let mut child = TokioCommand::new(&state.cfg.apple_bin)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1061,7 +1156,7 @@ async fn agent_call(state: &AppState, provider: &str, mut payload: Value) -> Res
         body.insert("tools".into(), agent_tools());
         body.insert("tool_choice".into(), json!("auto"));
         if let Some(messages) = body.get_mut("messages").and_then(Value::as_array_mut) {
-            messages.insert(0, json!({"role":"system","content":"You are Thomas AI's local-computer agent. You have access to tools that execute on the user's Mac. When the user asks you to inspect files, edit code, run commands, test software, or inspect Git, you MUST call the relevant local tool before answering. Do not claim you lack access. Tool results are local and must be used to produce the final answer. Use read/list tools before modifying files when practical, and describe completed actions concisely."}));
+            messages.insert(0, json!({"role":"system","content":"You are Multi-Model AI Gateway's local-computer agent. You have access to tools that execute on the user's Mac. When the user asks you to inspect files, edit code, run commands, test software, or inspect Git, you MUST call the relevant local tool before answering. Do not claim you lack access. Tool results are local and must be used to produce the final answer. Use read/list tools before modifying files when practical, and describe completed actions concisely."}));
         }
     }
     for _ in 0..6 {
@@ -1174,7 +1269,7 @@ async fn chat(
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(
-                json!({"error":{"message":"request blocked by Thomas AI security guard","security":security}}),
+                json!({"error":{"message":"request blocked by Multi-Model AI Gateway security guard","security":security}}),
             ),
         ));
     }
@@ -1197,7 +1292,7 @@ async fn chat(
             .as_ref()
             .and_then(|model| learned_provider(model, &req))
             .filter(|prediction| {
-                let minimum = env::var("THOMAS_ROUTER_MIN_CONFIDENCE")
+                let minimum = env::var("MULTI_MODEL_GATEWAY_ROUTER_MIN_CONFIDENCE")
                     .ok()
                     .and_then(|value| value.parse::<f64>().ok())
                     .unwrap_or(0.65);
@@ -1372,7 +1467,7 @@ async fn chat(
     drop(stats);
     if let Value::Object(ref mut object) = response {
         object.insert(
-            "_thomas_ai".into(),
+            "_multi_model_gateway".into(),
             json!({"provider":used,"difficulty":score,"latency_ms":elapsed.round()}),
         );
     }
@@ -1402,7 +1497,7 @@ async fn models(State(state): State<AppState>) -> Json<Value> {
 async fn status(State(state): State<AppState>) -> Json<Value> {
     let stats = state.stats.lock().await;
     Json(
-        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"graphify":{"nodes":state.graph.nodes.len(),"edges":state.graph.edges.len(),"query":"POST /api/graph/query","html":"/graph.html"},"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
+        json!({"name":"Multi-Model AI Gateway","access_mode":env::var("MULTI_MODEL_GATEWAY_ACCESS_MODE").unwrap_or_else(|_| "readonly".into()),"agent_tools":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_AGENT_TOOLS"),"file_writes":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_FILE_WRITES"),"shell_commands":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_COMMANDS"),"access_scope":"repository-only when tools are enabled","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"graphify":{"nodes":state.graph.nodes.len(),"edges":state.graph.edges.len(),"query":"POST /api/graph/query","html":"/graph.html"},"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
     )
 }
 
@@ -1456,7 +1551,7 @@ async fn graph_html(State(state): State<AppState>) -> impl IntoResponse {
 async fn metrics(State(state): State<AppState>) -> Response {
     let stats = state.stats.lock().await;
     let body = format!(
-        "# TYPE thomas_requests_total counter\nthomas_requests_total{{provider=\"local\"}} {}\nthomas_requests_total{{provider=\"nvidia\"}} {}\n# TYPE thomas_failures_total counter\nthomas_failures_total{{provider=\"local\"}} {}\nthomas_failures_total{{provider=\"nvidia\"}} {}\n# TYPE thomas_timeouts_total counter\nthomas_timeouts_total{{provider=\"nvidia\"}} {}\n# TYPE thomas_inflight gauge\nthomas_inflight{{provider=\"local\"}} {}\nthomas_inflight{{provider=\"nvidia\"}} {}\n# TYPE thomas_last_latency_ms gauge\nthomas_last_latency_ms{{provider=\"local\"}} {}\nthomas_last_latency_ms{{provider=\"nvidia\"}} {}\n",
+        "# TYPE multi_model_gateway_requests_total counter\nmulti_model_gateway_requests_total{{provider=\"local\"}} {}\nmulti_model_gateway_requests_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_failures_total counter\nmulti_model_gateway_failures_total{{provider=\"local\"}} {}\nmulti_model_gateway_failures_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_timeouts_total counter\nmulti_model_gateway_timeouts_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_inflight gauge\nmulti_model_gateway_inflight{{provider=\"local\"}} {}\nmulti_model_gateway_inflight{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_last_latency_ms gauge\nmulti_model_gateway_last_latency_ms{{provider=\"local\"}} {}\nmulti_model_gateway_last_latency_ms{{provider=\"nvidia\"}} {}\n",
         stats.local_requests,
         stats.nvidia_requests,
         stats.local_failures,
@@ -1481,8 +1576,8 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         security: Arc::new(security::SecurityGuard::new()),
         context: Arc::new(context::ContextRegistry::load()),
         graph: Arc::new(graph::GraphIndex::build(std::path::Path::new(
-            &env::var("THOMAS_GRAPH_ROOT")
-                .or_else(|_| env::var("THOMAS_REPO_ROOT"))
+            &env::var("MULTI_MODEL_GATEWAY_GRAPH_ROOT")
+                .or_else(|_| env::var("MULTI_MODEL_GATEWAY_REPO_ROOT"))
                 .unwrap_or_else(|_| ".".into()),
         ))),
         http: Client::builder().pool_max_idle_per_host(32).build()?,
@@ -1496,7 +1591,7 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(|| async { Html(DASHBOARD) }))
         .route(
             "/health",
-            get(|| async { Json(json!({"ok":true,"service":"Thomas AI"})) }),
+            get(|| async { Json(json!({"ok":true,"service":"Multi-Model AI Gateway"})) }),
         )
         .route("/api/status", get(status))
         .route("/api/security", get(security_status))
@@ -1511,7 +1606,10 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         .layer(DefaultBodyLimit::max(4 * 1024 * 1024))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", cli.host, cli.port)).await?;
-    println!("Thomas AI listening on http://{}:{}", cli.host, cli.port);
+    println!(
+        "Multi-Model AI Gateway listening on http://{}:{}",
+        cli.host, cli.port
+    );
     axum::serve(listener, app)
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -1528,11 +1626,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Status) => println!(
             "{}",
             serde_json::to_string_pretty(
-                &json!({"service":"Thomas AI","gateway":"http://127.0.0.1:8788","mlx":"http://127.0.0.1:8080/v1","nvidia":"https://integrate.api.nvidia.com/v1","rdma":"MLX JACCL over Thunderbolt 5"})
+                &json!({"service":"Multi-Model AI Gateway","gateway":"http://127.0.0.1:8788","mlx":"http://127.0.0.1:8080/v1","nvidia":"https://integrate.api.nvidia.com/v1","rdma":"MLX JACCL over Thunderbolt 5"})
             )?
         ),
         Some(Commands::Models) => {
-            println!("Run `thomas-ai serve` then query http://127.0.0.1:8788/v1/models")
+            println!("Run `multi-model-gateway serve` then query http://127.0.0.1:8788/v1/models")
         }
         Some(Commands::Chat {
             prompt,
@@ -1581,13 +1679,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(Commands::Cluster { action }) => println!(
-            "Thomas AI cluster {}: configure MLX JACCL/RDMA over Thunderbolt 5; EXO_BASE_URL={}",
+            "Multi-Model AI Gateway cluster {}: configure MLX JACCL/RDMA over Thunderbolt 5; EXO_BASE_URL={}",
             action,
             env::var("EXO_BASE_URL").unwrap_or_else(|_| "unset".into())
         ),
         Some(Commands::Graph { action, query }) => {
-            let root = env::var("THOMAS_GRAPH_ROOT")
-                .or_else(|_| env::var("THOMAS_REPO_ROOT"))
+            let root = env::var("MULTI_MODEL_GATEWAY_GRAPH_ROOT")
+                .or_else(|_| env::var("MULTI_MODEL_GATEWAY_REPO_ROOT"))
                 .unwrap_or_else(|_| ".".into());
             let index = graph::GraphIndex::build(std::path::Path::new(&root));
             match action.as_str() {
