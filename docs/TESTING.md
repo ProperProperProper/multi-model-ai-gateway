@@ -67,3 +67,15 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
 ```
 
 For a real model call, use `thomas_chat` with `provider: "nvidia"` or `provider: "local"`. The MCP server delegates to the gateway and never receives provider credentials.
+
+Multi-agent lab smoke test:
+
+```sh
+python3 skills/multi-agent-ai-lab/scripts/run_lab.py \
+  --prompt "Compare two safe router improvements" \
+  --workers 2 \
+  --provider local \
+  --dry-run
+```
+
+Remove `--dry-run` for a live run. Artifacts are isolated under `lab_runs/` and are ignored by Git.

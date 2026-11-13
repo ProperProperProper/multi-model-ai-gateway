@@ -20,6 +20,7 @@ Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](h
 - Prometheus-compatible `/metrics` endpoint.
 - Multi-chat browser interface with response timing and backend status.
 - EXO/RDMA integration point for future multi-Mac MLX clustering.
+- Multi-agent AI lab skill with planner, parallel workers, reviewer, reporter, and isolated run artifacts.
 
 ## Requirements
 
@@ -35,6 +36,7 @@ Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](h
 - [Testing and verification](docs/TESTING.md)
 - [Apple AI bridge](apple-ai-bridge/README.md)
 - [Shared trading adapters](ADAPTERS.md)
+- [Multi-agent AI lab](skills/multi-agent-ai-lab/SKILL.md)
 
 ## Run
 
