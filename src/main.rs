@@ -88,6 +88,7 @@ enum Commands {
 #[derive(Clone)]
 struct AppState {
     cfg: Arc<Config>,
+    router_model: Option<RouterModel>,
     http: Client,
     stats: Arc<Mutex<Stats>>,
     local_inflight: Arc<std::sync::atomic::AtomicUsize>,
@@ -126,6 +127,15 @@ struct Config {
     apple_bin: String,
     apple_mode: String,
     local_max_difficulty: u8,
+}
+
+#[derive(Clone, Deserialize)]
+struct RouterModel {
+    classes: Vec<String>,
+    means: Vec<f64>,
+    scales: Vec<f64>,
+    weights: Vec<Vec<f64>>,
+    bias: Vec<f64>,
 }
 
 #[derive(Default, Serialize)]
@@ -215,6 +225,91 @@ fn config(provider: String) -> Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(3),
     }
+}
+
+fn load_router_model() -> Option<RouterModel> {
+    let path = env::var("THOMAS_ROUTER_MODEL").ok()?;
+    let bytes = fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn router_features(req: &ChatRequest) -> Vec<f64> {
+    let text = req
+        .messages
+        .iter()
+        .filter_map(|message| message.content.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let lower = text.to_lowercase();
+    let words = lower.split_whitespace().count() as f64;
+    let count_terms = |terms: &[&str]| -> f64 {
+        terms
+            .iter()
+            .map(|term| lower.matches(term).count() as f64)
+            .sum()
+    };
+    vec![
+        (text.len().min(12_000) as f64) / 12_000.0,
+        words.min(2_400.0) / 2_400.0,
+        (text.matches('?').count().min(10) as f64) / 10.0,
+        (text.matches('\n').count().min(100) as f64) / 100.0,
+        if text.contains("```") || lower.contains("traceback") {
+            1.0
+        } else {
+            0.0
+        },
+        count_terms(&[
+            "run", "execute", "edit", "write", "shell", "command", "terminal", "git",
+        ]) / 8.0,
+        count_terms(&[
+            "architecture",
+            "debug",
+            "refactor",
+            "prove",
+            "derive",
+            "compare",
+            "optimize",
+        ]) / 6.0,
+        count_terms(&["private", "offline", "local", "mac", "file", "repository"]) / 6.0,
+    ]
+}
+
+fn learned_provider(model: &RouterModel, req: &ChatRequest) -> Option<String> {
+    if model.classes.is_empty()
+        || model.means.len() != model.scales.len()
+        || model.weights.len() != model.classes.len()
+        || model.bias.len() != model.classes.len()
+    {
+        return None;
+    }
+    let values = router_features(req);
+    let normalized = values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let mean = model.means.get(index).copied().unwrap_or(0.0);
+            let scale = model.scales.get(index).copied().unwrap_or(1.0);
+            (value - mean) / if scale == 0.0 { 1.0 } else { scale }
+        })
+        .collect::<Vec<_>>();
+    model
+        .weights
+        .iter()
+        .zip(model.bias.iter())
+        .enumerate()
+        .map(|(index, (weights, bias))| {
+            (
+                index,
+                *bias
+                    + weights
+                        .iter()
+                        .zip(normalized.iter())
+                        .map(|(w, v)| w * v)
+                        .sum::<f64>(),
+            )
+        })
+        .max_by(|left, right| left.1.total_cmp(&right.1))
+        .and_then(|(index, _)| model.classes.get(index).cloned())
 }
 
 fn routed_nvidia_model(state: &AppState, score: u8) -> String {
@@ -977,10 +1072,18 @@ async fn chat(
         let nvidia_load = state
             .nvidia_inflight
             .load(std::sync::atomic::Ordering::Relaxed);
-        if score <= state.cfg.local_max_difficulty && local_load <= nvidia_load + 1 {
-            "local"
-        } else {
-            "nvidia"
+        let learned = state
+            .router_model
+            .as_ref()
+            .and_then(|model| learned_provider(model, &req));
+        match learned.as_deref() {
+            Some("apple") => "apple",
+            Some("nvidia") => "nvidia",
+            Some("local") => "local",
+            _ if score <= state.cfg.local_max_difficulty && local_load <= nvidia_load + 1 => {
+                "local"
+            }
+            _ => "nvidia",
         }
     } else {
         selected.as_str()
@@ -1164,7 +1267,7 @@ async fn models(State(state): State<AppState>) -> Json<Value> {
 async fn status(State(state): State<AppState>) -> Json<Value> {
     let stats = state.stats.lock().await;
     Json(
-        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","local_max_difficulty":state.cfg.local_max_difficulty,"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}},"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
+        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}},"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
     )
 }
 
@@ -1189,8 +1292,10 @@ async fn metrics(State(state): State<AppState>) -> Response {
 }
 
 async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
+    let router_model = load_router_model();
     let state = AppState {
         cfg: Arc::new(config(cli.provider.clone())),
+        router_model,
         http: Client::builder().pool_max_idle_per_host(32).build()?,
         stats: Arc::new(Mutex::new(Stats::default())),
         local_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),

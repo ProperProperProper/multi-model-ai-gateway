@@ -58,6 +58,10 @@ This recovery is safe because MLX is supervised by launchd. A model-list respons
 
 Check `/api/status` and `/metrics`. NVIDIA health is cached briefly to avoid hammering the upstream API. Requests are limited to the verified free-model allowlist. If NVIDIA is unavailable, explicit NVIDIA requests fail clearly; automatic requests may use local MLX when difficulty and health permit.
 
+## Learned router deployment
+
+Train and validate a router outside the gateway, then set `THOMAS_ROUTER_MODEL` in the gateway launch environment. `/api/status` reports `learned_router: true` when the file loaded successfully. Remove the variable to return to the built-in difficulty heuristic. Never deploy a model trained on secrets or private customer data into a shared repository.
+
 ## Apple failures
 
 The Swift bridge reports on-device and Private Cloud availability. A Private Cloud session may still fail at runtime because Apple has not provisioned the session assets; the bridge automatically falls back to on-device Foundation Models. This is reported in the response model name as `apple-foundation-model-fallback`.
