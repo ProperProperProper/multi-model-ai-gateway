@@ -21,6 +21,7 @@ Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](h
 - Multi-chat browser interface with response timing and backend status.
 - EXO/RDMA integration point for future multi-Mac MLX clustering.
 - Multi-agent AI lab skill with planner, parallel workers, reviewer, reporter, and isolated run artifacts.
+- Local Graphify-style repository knowledge graph with HTML visualization, architecture report, and query API.
 - Native behavioral/KV-proxy security guard for prompts, tools, agent runs, and optional MLX telemetry.
 
 ## Requirements
@@ -38,6 +39,7 @@ Article: [How Thomas AI combines free NVIDIA LLMs, MLX, and Apple AI services](h
 - [Apple AI bridge](apple-ai-bridge/README.md)
 - [Shared trading adapters](ADAPTERS.md)
 - [Multi-agent AI lab](skills/multi-agent-ai-lab/SKILL.md)
+- [Context engineering and local graph](context/README.md)
 - [Security guard](security/README.md)
 - [KV-first security explained](security/KV_FIRST_SECURITY.md)
 
@@ -59,11 +61,25 @@ The current machine deployment runs the private release binary through `com.thom
 curl http://127.0.0.1:8788/health
 curl http://127.0.0.1:8788/api/status
 curl http://127.0.0.1:8788/metrics
+open http://127.0.0.1:8788/graph.html
 
 curl -N http://127.0.0.1:8788/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"Hello"}],"stream":true}'
 ```
+
+## Local Graphify-style subsystem
+
+Thomas builds a deterministic local graph of the configured repository in Rust. It indexes source, documentation, configuration, and SQL files while excluding Git metadata, build directories, virtual environments, lab artifacts, and credential-like files. The graph contains files, functions/classes/structs/enums/traits, dependencies, imports, definitions, and approximate call relationships.
+
+CLI:
+
+```sh
+thomas-ai graph scan
+thomas-ai graph query --query security
+```
+
+The scan writes `graphify-out/graph.json`, `graphify-out/GRAPH_REPORT.md`, and `graphify-out/graph.html` locally. The running gateway exposes `GET /api/graph`, `POST /api/graph/query`, `GET /api/graph/report`, and `GET /graph.html`. Thomas uses the graph as bounded repository context for future subagent research and code review; it does not upload source code or require a vector database.
 
 ## NVIDIA free endpoints
 

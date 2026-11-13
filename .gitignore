@@ -1,6 +1,7 @@
 /target/
 /.build/
 lab_runs/
+graphify-out/
 apple-ai-bridge/.build/
 .DS_Store
 *.log

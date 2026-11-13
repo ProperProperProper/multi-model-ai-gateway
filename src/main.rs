@@ -25,6 +25,7 @@ use tokio::{
 };
 
 mod context;
+mod graph;
 mod security;
 
 const LOCAL_URL: &str = "http://127.0.0.1:8080/v1";
@@ -82,6 +83,12 @@ enum Commands {
         #[arg(default_value = "status")]
         action: String,
     },
+    Graph {
+        #[arg(default_value = "status")]
+        action: String,
+        #[arg(long)]
+        query: Option<String>,
+    },
     Exec {
         #[arg(trailing_var_arg = true)]
         command: Vec<String>,
@@ -94,6 +101,7 @@ struct AppState {
     router_model: Option<RouterModel>,
     security: Arc<security::SecurityGuard>,
     context: Arc<context::ContextRegistry>,
+    graph: Arc<graph::GraphIndex>,
     http: Client,
     stats: Arc<Mutex<Stats>>,
     local_inflight: Arc<std::sync::atomic::AtomicUsize>,
@@ -1394,7 +1402,7 @@ async fn models(State(state): State<AppState>) -> Json<Value> {
 async fn status(State(state): State<AppState>) -> Json<Value> {
     let stats = state.stats.lock().await;
     Json(
-        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
+        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"graphify":{"nodes":state.graph.nodes.len(),"edges":state.graph.edges.len(),"query":"POST /api/graph/query","html":"/graph.html"},"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
     )
 }
 
@@ -1410,6 +1418,39 @@ async fn security_kv(
     Json(
         json!({"model":telemetry.model,"pages":telemetry.pages,"cache_tokens":telemetry.cache_tokens,"decision":decision}),
     )
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQuery {
+    query: String,
+    #[serde(default = "default_graph_limit")]
+    limit: usize,
+}
+
+fn default_graph_limit() -> usize {
+    50
+}
+
+async fn graph_json(State(state): State<AppState>) -> Json<graph::GraphIndex> {
+    Json((*state.graph).clone())
+}
+
+async fn graph_query(
+    State(state): State<AppState>,
+    Json(request): Json<GraphQuery>,
+) -> Json<Value> {
+    Json(state.graph.query(&request.query, request.limit.min(500)))
+}
+
+async fn graph_report(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+        state.graph.report(),
+    )
+}
+
+async fn graph_html(State(state): State<AppState>) -> impl IntoResponse {
+    Html(state.graph.html())
 }
 
 async fn metrics(State(state): State<AppState>) -> Response {
@@ -1439,6 +1480,11 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         router_model,
         security: Arc::new(security::SecurityGuard::new()),
         context: Arc::new(context::ContextRegistry::load()),
+        graph: Arc::new(graph::GraphIndex::build(std::path::Path::new(
+            &env::var("THOMAS_GRAPH_ROOT")
+                .or_else(|_| env::var("THOMAS_REPO_ROOT"))
+                .unwrap_or_else(|_| ".".into()),
+        ))),
         http: Client::builder().pool_max_idle_per_host(32).build()?,
         stats: Arc::new(Mutex::new(Stats::default())),
         local_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -1455,6 +1501,10 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/status", get(status))
         .route("/api/security", get(security_status))
         .route("/api/security/kv", post(security_kv))
+        .route("/api/graph", get(graph_json))
+        .route("/api/graph/query", post(graph_query))
+        .route("/api/graph/report", get(graph_report))
+        .route("/graph.html", get(graph_html))
         .route("/metrics", get(metrics))
         .route("/v1/models", get(models))
         .route("/v1/chat/completions", post(chat))
@@ -1535,6 +1585,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             action,
             env::var("EXO_BASE_URL").unwrap_or_else(|_| "unset".into())
         ),
+        Some(Commands::Graph { action, query }) => {
+            let root = env::var("THOMAS_GRAPH_ROOT")
+                .or_else(|_| env::var("THOMAS_REPO_ROOT"))
+                .unwrap_or_else(|_| ".".into());
+            let index = graph::GraphIndex::build(std::path::Path::new(&root));
+            match action.as_str() {
+                "scan" => {
+                    let output = std::path::Path::new(&root).join("graphify-out");
+                    fs::create_dir_all(&output)?;
+                    fs::write(
+                        output.join("graph.json"),
+                        serde_json::to_vec_pretty(&index)?,
+                    )?;
+                    fs::write(output.join("GRAPH_REPORT.md"), index.report())?;
+                    fs::write(output.join("graph.html"), index.html())?;
+                    println!("wrote {}", output.display());
+                }
+                "query" => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&index.query(query.as_deref().unwrap_or(""), 50))?
+                ),
+                _ => println!(
+                    "{} nodes, {} edges; use `graph scan` or `graph query --query TERM`",
+                    index.nodes.len(),
+                    index.edges.len()
+                ),
+            }
+        }
         Some(Commands::Exec { command }) => {
             if command.is_empty() {
                 return Err("provide a command to execute".into());
