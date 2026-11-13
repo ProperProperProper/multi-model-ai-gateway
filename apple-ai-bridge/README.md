@@ -18,5 +18,5 @@ Input:
 {"prompt":"Explain this API design.","mode":"on_device","instructions":"Be concise."}
 ```
 
-Supported modes are `on_device` and `private_cloud`. Private Cloud Compute is optional and is used only when Apple reports it as available; otherwise Multi-Model AI Gateway continues using MLX or the verified free NVIDIA pool.
+Supported modes are `on_device` and `private_cloud`. The public macOS 26 SDK does not expose a Private Cloud Compute model, so `private_cloud` requests safely fall back to the on-device Foundation Model and report that fallback.
 
