@@ -65,6 +65,8 @@ python3 ai/ml/contamination.py ai/datasets/router.jsonl ai/datasets/router_synth
 
 Synthetic data is for smoke tests and bootstrapping only. Review it and evaluate against real held-out request outcomes before enabling a learned router.
 
+The multi-agent orchestration workflow is documented in [skills/multi-agent-ai-lab/SKILL.md](../skills/multi-agent-ai-lab/SKILL.md). It uses the same gateway and can run the workers on free NVIDIA endpoints or local MLX.
+
 For MLX training, retain train/validation loss per epoch and run `python3 ai/ml/monitor.py metrics.jsonl`. If validation loss worsens while training loss improves, stop and restore the best validation checkpoint. Increase data diversity before increasing model size or training steps.
 
 ## Data contract
