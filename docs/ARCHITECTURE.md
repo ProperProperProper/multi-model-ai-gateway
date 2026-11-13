@@ -20,7 +20,7 @@ Browser / CLI / OpenAI client
 
 Requests can select `local`, `apple`, `nvidia`, or `auto` through `extra_body.provider` or the `x-ai-provider` header.
 
-`auto` scores request difficulty from 0–10 and considers in-flight load:
+`auto` scores request difficulty from 0–10 and considers in-flight load. If `THOMAS_ROUTER_MODEL` points to a compatible trained router JSON file, its provider prediction is used as an additional learned signal; the heuristic remains the fallback.
 
 - difficulty `<= AI_LOCAL_MAX_DIFFICULTY` (default 3): prefer local MLX when it is not materially busier;
 - harder requests: prefer NVIDIA;

@@ -45,3 +45,15 @@ The live verification matrix is:
 | automatic easy route | normally selects local MLX when healthy |
 | UI and CLI | serve, render, and execute bounded commands |
 | secret scan | no credentials or generated build artifacts tracked |
+
+Self-supervised data preparation can be smoke-tested without training a model:
+
+```sh
+python3 ai/ml/self_supervised.py corpus /tmp/thomas-ai-self-supervised .
+test -s /tmp/thomas-ai-self-supervised/train.jsonl
+python3 ai/ml/contamination.py /tmp/thomas-ai-self-supervised/train.jsonl /tmp/thomas-ai-self-supervised/valid.jsonl
+```
+
+Do not commit generated corpora until they have been reviewed for secrets and proprietary content.
+
+Model-quality checks should include a held-out validation set, train/validation loss curves, provider accuracy, latency, fallback rate, and failure rate. Treat a rising validation loss or widening train/validation gap as an overfitting failure, not a successful training run.

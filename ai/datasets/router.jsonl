@@ -1,0 +1,12 @@
+{"prompt":"Summarize this short paragraph privately on my Mac.","provider":"local"}
+{"prompt":"Read the repository README and explain the local files.","provider":"local"}
+{"prompt":"Run the test suite and report the result.","provider":"local"}
+{"prompt":"Draft a short function comment.","provider":"local"}
+{"prompt":"Use Apple Intelligence to rewrite this note in a friendly tone.","provider":"apple"}
+{"prompt":"Summarize this text using Apple's native writing style.","provider":"apple"}
+{"prompt":"Explain the tradeoffs between two local Swift APIs.","provider":"apple"}
+{"prompt":"Prove the architecture is safe under concurrent requests and compare alternatives.","provider":"nvidia"}
+{"prompt":"Refactor this large module, debug the traceback, and derive the root cause step by step.","provider":"nvidia"}
+{"prompt":"Design a robust model-training pipeline and optimize its failure handling.","provider":"nvidia"}
+{"prompt":"Compare several language-model architectures for a production application.","provider":"nvidia"}
+{"prompt":"Analyze this long strategy and explain the risk trade-offs in detail.","provider":"nvidia"}
