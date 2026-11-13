@@ -36,7 +36,7 @@ For optional outcome learning, export local-only telemetry as JSONL and run `boo
 
 ## Free NVIDIA assistance
 
-`ai/ml/llm_assist.py` can use the running Multi-Model AI Gateway gateway's NVIDIA provider to bootstrap labels, generate review candidates, or critique dataset examples. The gateway chooses only from the verified free NVIDIA allowlist; this script never reads or stores an NVIDIA key. Generated labels are marked `review_required: true`, and contamination/validation checks must run before training.
+`ai/ml/llm_assist.py` can use the running Multi-Model AI Gateway's NVIDIA provider to bootstrap labels, generate review candidates, or critique dataset examples. The gateway chooses only from the verified free NVIDIA allowlist; this script never reads or stores an NVIDIA key. Generated labels are marked `review_required: true`, and contamination/validation checks must run before training.
 
 ```sh
 python3 ai/ml/llm_assist.py ai/datasets/router.jsonl /tmp/router-llm-labels.jsonl

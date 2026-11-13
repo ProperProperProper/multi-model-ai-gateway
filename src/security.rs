@@ -299,7 +299,53 @@ impl SecurityGuard {
         self.decision(score, reasons, false)
     }
 
+    pub fn valid_kv(telemetry: &KvTelemetry) -> bool {
+        telemetry.pages.is_finite()
+            && telemetry.cache_tokens.is_finite()
+            && telemetry.mean_norm.is_finite()
+            && telemetry.max_norm.is_finite()
+            && telemetry
+                .attention_entropy
+                .map(|value| value.is_finite())
+                .unwrap_or(true)
+            && telemetry.pages >= 0.0
+            && telemetry.cache_tokens >= 0.0
+            && telemetry.mean_norm >= 0.0
+            && telemetry.max_norm >= 0.0
+    }
+
     pub fn status(&self) -> Value {
         json!({"mode":self.mode,"agent_mode":self.agent_mode,"observed":self.observed.load(Ordering::Relaxed),"blocked":self.blocked.load(Ordering::Relaxed),"raw_kv":"optional aggregate telemetry endpoint","privacy":"raw prompts and KV tensors are not persisted"})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{KvTelemetry, SecurityGuard};
+
+    fn telemetry() -> KvTelemetry {
+        KvTelemetry {
+            model: Some("test".into()),
+            pages: 1.0,
+            cache_tokens: 8.0,
+            mean_norm: 1.0,
+            max_norm: 2.0,
+            attention_entropy: Some(0.5),
+        }
+    }
+
+    #[test]
+    fn rejects_non_finite_or_negative_telemetry() {
+        let mut invalid = telemetry();
+        invalid.mean_norm = f64::NAN;
+        assert!(!SecurityGuard::valid_kv(&invalid));
+        let mut invalid = telemetry();
+        invalid.pages = -1.0;
+        assert!(!SecurityGuard::valid_kv(&invalid));
+    }
+
+    #[test]
+    fn accepts_finite_non_negative_telemetry() {
+        assert!(SecurityGuard::valid_kv(&telemetry()));
     }
 }
