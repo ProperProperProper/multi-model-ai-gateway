@@ -44,6 +44,27 @@ python3 ai/ml/llm_assist.py ai/datasets/router.jsonl /tmp/router-llm-labels.json
 python3 ai/ml/contamination.py /tmp/train.jsonl /tmp/valid.jsonl
 ```
 
+## MCP integration
+
+Run the dependency-free stdio MCP server from an MCP-capable client:
+
+```sh
+python3 ai/mcp_server.py
+```
+
+It exposes `thomas_health`, `thomas_chat`, and `thomas_router_sample`. The default chat provider is NVIDIA through the local gateway; the gateway enforces the verified-free model allowlist. Pass `provider: "local"` to use MLX. The MCP process never receives an NVIDIA key.
+
+## Sample data
+
+Generate reviewable synthetic routing data:
+
+```sh
+python3 ai/ml/generate_samples.py ai/datasets/router_synthetic.jsonl --rows 120
+python3 ai/ml/contamination.py ai/datasets/router.jsonl ai/datasets/router_synthetic.jsonl
+```
+
+Synthetic data is for smoke tests and bootstrapping only. Review it and evaluate against real held-out request outcomes before enabling a learned router.
+
 For MLX training, retain train/validation loss per epoch and run `python3 ai/ml/monitor.py metrics.jsonl`. If validation loss worsens while training loss improves, stop and restore the best validation checkpoint. Increase data diversity before increasing model size or training steps.
 
 ## Data contract

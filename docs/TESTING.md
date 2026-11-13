@@ -57,3 +57,13 @@ python3 ai/ml/contamination.py /tmp/thomas-ai-self-supervised/train.jsonl /tmp/t
 Do not commit generated corpora until they have been reviewed for secrets and proprietary content.
 
 Model-quality checks should include a held-out validation set, train/validation loss curves, provider accuracy, latency, fallback rate, and failure rate. Treat a rising validation loss or widening train/validation gap as an overfitting failure, not a successful training run.
+
+MCP smoke test:
+
+```sh
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+  | python3 ai/mcp_server.py
+```
+
+For a real model call, use `thomas_chat` with `provider: "nvidia"` or `provider: "local"`. The MCP server delegates to the gateway and never receives provider credentials.
