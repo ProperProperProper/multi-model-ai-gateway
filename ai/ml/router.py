@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import random
 from pathlib import Path
 from typing import Iterable
 
@@ -102,6 +103,9 @@ def train(rows: Iterable[dict], epochs: int = 600, learning_rate: float = 0.35, 
     rows = list(rows)
     if len(rows) < 6:
         raise ValueError("at least six examples are required for a validation split")
+    if any(sum(row["provider"] == provider for row in rows) < 2 for provider in CLASSES):
+        raise ValueError("each provider needs at least two examples")
+    random.Random(42).shuffle(rows)
     split = max(1, int(len(rows) * 0.8))
     train_rows, valid_rows = rows[:split], rows[split:]
     vectors = [features(row["prompt"]) for row in rows]
@@ -157,7 +161,7 @@ def main() -> None:
         model = train(read_rows(args.dataset), epochs=args.epochs)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(model, indent=2) + "\n")
-        print(json.dumps({"ok": True, "model": str(args.output), "rows": len(read_rows(args.dataset))}))
+        print(json.dumps({"ok": True, "model": str(args.output), "rows": len(read_rows(args.dataset)), "training": model["training"]}))
     else:
         print(json.dumps(predict(json.loads(args.model.read_text()), " ".join(args.prompt))))
 

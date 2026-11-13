@@ -138,6 +138,11 @@ struct RouterModel {
     bias: Vec<f64>,
 }
 
+struct RouterPrediction {
+    provider: String,
+    confidence: f64,
+}
+
 #[derive(Default, Serialize)]
 struct Stats {
     local_requests: u64,
@@ -230,7 +235,28 @@ fn config(provider: String) -> Config {
 fn load_router_model() -> Option<RouterModel> {
     let path = env::var("THOMAS_ROUTER_MODEL").ok()?;
     let bytes = fs::read(path).ok()?;
-    serde_json::from_slice(&bytes).ok()
+    let model: RouterModel = serde_json::from_slice(&bytes).ok()?;
+    let valid_classes = model
+        .classes
+        .iter()
+        .all(|class| matches!(class.as_str(), "local" | "nvidia" | "apple"));
+    let feature_count = model.means.len();
+    let valid_shape = !model.classes.is_empty()
+        && feature_count == model.scales.len()
+        && model.weights.len() == model.classes.len()
+        && model
+            .weights
+            .iter()
+            .all(|weights| weights.len() == feature_count)
+        && model.bias.len() == model.classes.len();
+    let finite = model
+        .means
+        .iter()
+        .chain(model.scales.iter())
+        .chain(model.bias.iter())
+        .chain(model.weights.iter().flatten())
+        .all(|value| value.is_finite());
+    (valid_classes && valid_shape && finite).then_some(model)
 }
 
 fn router_features(req: &ChatRequest) -> Vec<f64> {
@@ -274,7 +300,7 @@ fn router_features(req: &ChatRequest) -> Vec<f64> {
     ]
 }
 
-fn learned_provider(model: &RouterModel, req: &ChatRequest) -> Option<String> {
+fn learned_provider(model: &RouterModel, req: &ChatRequest) -> Option<RouterPrediction> {
     if model.classes.is_empty()
         || model.means.len() != model.scales.len()
         || model.weights.len() != model.classes.len()
@@ -292,7 +318,7 @@ fn learned_provider(model: &RouterModel, req: &ChatRequest) -> Option<String> {
             (value - mean) / if scale == 0.0 { 1.0 } else { scale }
         })
         .collect::<Vec<_>>();
-    model
+    let scores = model
         .weights
         .iter()
         .zip(model.bias.iter())
@@ -308,8 +334,28 @@ fn learned_provider(model: &RouterModel, req: &ChatRequest) -> Option<String> {
                         .sum::<f64>(),
             )
         })
-        .max_by(|left, right| left.1.total_cmp(&right.1))
-        .and_then(|(index, _)| model.classes.get(index).cloned())
+        .map(|(_, score)| score)
+        .collect::<Vec<_>>();
+    let peak = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let probabilities = scores
+        .iter()
+        .map(|score| (score - peak).exp())
+        .collect::<Vec<_>>();
+    let total = probabilities.iter().sum::<f64>();
+    probabilities
+        .iter()
+        .enumerate()
+        .max_by(|left, right| left.1.total_cmp(right.1))
+        .and_then(|(index, probability)| {
+            model
+                .classes
+                .get(index)
+                .cloned()
+                .map(|provider| RouterPrediction {
+                    provider,
+                    confidence: probability / total,
+                })
+        })
 }
 
 fn routed_nvidia_model(state: &AppState, score: u8) -> String {
@@ -1075,8 +1121,18 @@ async fn chat(
         let learned = state
             .router_model
             .as_ref()
-            .and_then(|model| learned_provider(model, &req));
-        match learned.as_deref() {
+            .and_then(|model| learned_provider(model, &req))
+            .filter(|prediction| {
+                let minimum = env::var("THOMAS_ROUTER_MIN_CONFIDENCE")
+                    .ok()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    .unwrap_or(0.65);
+                prediction.confidence >= minimum
+            });
+        match learned
+            .as_ref()
+            .map(|prediction| prediction.provider.as_str())
+        {
             Some("apple") => "apple",
             Some("nvidia") => "nvidia",
             Some("local") => "local",

@@ -18,7 +18,7 @@ python3 ai/ml/router.py predict ai/models/router-v1.json \
   "Compare architectures and derive the failure mode step by step"
 ```
 
-The generated model is intentionally optional and should be evaluated against real request/latency/failure data before becoming the default. Training uses a held-out validation split, L2 regularization, early stopping, and best-checkpoint restoration to limit overfitting. The current heuristic router remains the safe fallback.
+The generated model is intentionally optional and should be evaluated against real request/latency/failure data before becoming the default. Training uses a deterministic shuffle, class-balance validation, a held-out split, L2 regularization, early stopping, best-checkpoint restoration, and a runtime confidence threshold (default 0.65) to limit overfitting and unsafe guesses. The current heuristic router remains the safe fallback.
 
 ## MLX deep-learning path
 
