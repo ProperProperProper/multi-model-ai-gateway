@@ -172,13 +172,13 @@ impl GraphIndex {
             .iter()
             .filter(|edge| edge.kind == "calls")
             .count();
-        format!("# Thomas AI local architecture graph\n\n- Root: `{}`\n- Files: {}\n- Symbols: {}\n- Import edges: {}\n- Call edges: {}\n\n## Most connected nodes\n\n{}", self.root, files, symbols, imports, calls, most_connected(self))
+        format!("# Multi-Model AI Gateway local architecture graph\n\n- Root: `{}`\n- Files: {}\n- Symbols: {}\n- Import edges: {}\n- Call edges: {}\n\n## Most connected nodes\n\n{}", self.root, files, symbols, imports, calls, most_connected(self))
     }
 
     pub fn html(&self) -> String {
         let data = serde_json::to_string(self).unwrap_or_else(|_| "{}".into());
         format!(
-            r#"<!doctype html><meta charset="utf-8"><title>Thomas AI Graph</title><style>body{{font:15px system-ui;background:#0b1110;color:#eef5ef;max-width:1200px;margin:30px auto;padding:0 20px}}input{{width:70%;padding:10px;background:#15221e;color:white;border:1px solid #49665a;border-radius:6px}}li{{margin:7px 0}}.file{{color:#78e0ae}}.symbol{{color:#ffdc65}}.dependency{{color:#9dbbff}}small{{color:#9aaca3}}</style><h1>Thomas AI local architecture graph</h1><p><small>Local deterministic scan. No source is uploaded.</small></p><input id="q" placeholder="Filter nodes" oninput="draw()"><div id="summary"></div><ul id="nodes"></ul><script>const g={data};function draw(){{let q=document.getElementById('q').value.toLowerCase();let n=g.nodes.filter(x=>(x.name+' '+x.path).toLowerCase().includes(q)).slice(0,500);document.getElementById('summary').textContent=n.length+' matching nodes · '+g.edges.length+' edges';document.getElementById('nodes').innerHTML=n.map(x=>`<li class="${{x.kind}}"><b>${{x.kind}}</b> ${{x.name}} <small>${{x.path}}:${{x.line}}</small></li>`).join('')}}draw()</script>"#
+            r#"<!doctype html><meta charset="utf-8"><title>Multi-Model AI Gateway Graph</title><style>body{{font:15px system-ui;background:#0b1110;color:#eef5ef;max-width:1200px;margin:30px auto;padding:0 20px}}input{{width:70%;padding:10px;background:#15221e;color:white;border:1px solid #49665a;border-radius:6px}}li{{margin:7px 0}}.file{{color:#78e0ae}}.symbol{{color:#ffdc65}}.dependency{{color:#9dbbff}}small{{color:#9aaca3}}</style><h1>Multi-Model AI Gateway architecture graph</h1><p><small>Local deterministic scan. No source is uploaded.</small></p><input id="q" placeholder="Filter nodes" oninput="draw()"><div id="summary"></div><ul id="nodes"></ul><script>const g={data};function draw(){{let q=document.getElementById('q').value.toLowerCase();let n=g.nodes.filter(x=>(x.name+' '+x.path).toLowerCase().includes(q)).slice(0,500);document.getElementById('summary').textContent=n.length+' matching nodes · '+g.edges.length+' edges';document.getElementById('nodes').innerHTML=n.map(x=>`<li class="${{x.kind}}"><b>${{x.kind}}</b> ${{x.name}} <small>${{x.path}}:${{x.line}}</small></li>`).join('')}}draw()</script>"#
         )
     }
 }

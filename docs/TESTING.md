@@ -10,7 +10,7 @@ cargo test --release --offline
 
 cd apple-ai-bridge
 swift build -c release
-./.build/release/thomas-apple-ai --status
+./.build/release/multi-model-apple-ai --status
 ```
 
 Run live checks after both launchd services are running:
@@ -30,7 +30,7 @@ curl -fsS http://127.0.0.1:8788/v1/chat/completions \
   -d '{"model":"auto","messages":[{"role":"user","content":"Reply exactly TEST_OK"}],"extra_body":{"provider":"auto","agent":false},"max_tokens":32}'
 ```
 
-Verify that the response includes `_thomas_ai.provider` and `_thomas_ai.latency_ms`. Do not print or save request headers containing credentials.
+Verify that the response includes `_multi_model_gateway.provider` and `_multi_model_gateway.latency_ms`. Do not print or save request headers containing credentials.
 
 The live verification matrix is:
 
@@ -38,7 +38,7 @@ The live verification matrix is:
 | --- | --- |
 | Rust formatting/build/lint/tests | pass |
 | Swift bridge status and request | pass; cloud may report fallback |
-| launchd gateway | running and points at the private release binary |
+| gateway | running and points at the release binary |
 | MLX direct completion | returns text, not only `/v1/models` |
 | NVIDIA direct route | returns a free-model response |
 | Apple route | returns Apple response and latency metadata |
@@ -49,9 +49,9 @@ The live verification matrix is:
 Self-supervised data preparation can be smoke-tested without training a model:
 
 ```sh
-python3 ai/ml/self_supervised.py corpus /tmp/thomas-ai-self-supervised .
-test -s /tmp/thomas-ai-self-supervised/train.jsonl
-python3 ai/ml/contamination.py /tmp/thomas-ai-self-supervised/train.jsonl /tmp/thomas-ai-self-supervised/valid.jsonl
+python3 ai/ml/self_supervised.py corpus /tmp/multi-model-ai-gateway-self-supervised .
+test -s /tmp/multi-model-ai-gateway-self-supervised/train.jsonl
+python3 ai/ml/contamination.py /tmp/multi-model-ai-gateway-self-supervised/train.jsonl /tmp/multi-model-ai-gateway-self-supervised/valid.jsonl
 ```
 
 Do not commit generated corpora until they have been reviewed for secrets and proprietary content.
@@ -66,7 +66,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
   | python3 ai/mcp_server.py
 ```
 
-For a real model call, use `thomas_chat` with `provider: "nvidia"` or `provider: "local"`. The MCP server delegates to the gateway and never receives provider credentials.
+For a real model call, use `gateway_chat` with `provider: "nvidia"` or `provider: "local"`. The MCP server delegates to the gateway and never receives provider credentials.
 
 Multi-agent lab smoke test:
 

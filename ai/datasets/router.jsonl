@@ -9,4 +9,4 @@
 {"prompt":"Refactor this large module, debug the traceback, and derive the root cause step by step.","provider":"nvidia"}
 {"prompt":"Design a robust model-training pipeline and optimize its failure handling.","provider":"nvidia"}
 {"prompt":"Compare several language-model architectures for a production application.","provider":"nvidia"}
-{"prompt":"Analyze this long strategy and explain the risk trade-offs in detail.","provider":"nvidia"}
+{"prompt":"Analyze this long technical proposal and explain the trade-offs in detail.","provider":"nvidia"}

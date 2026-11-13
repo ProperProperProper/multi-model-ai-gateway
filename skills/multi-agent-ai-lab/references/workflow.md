@@ -29,4 +29,4 @@ The lab generates candidate recommendations and artifacts. Applying a patch is a
 
 ## Backend policy
 
-`nvidia` calls Thomas AI's verified-free NVIDIA provider. `local` calls the MLX backend. `auto` lets the gateway choose. Apple can be selected by calling the gateway directly, but the lab defaults to NVIDIA or MLX for comparable worker results.
+`nvidia` calls Multi-Model AI Gateway's verified-free NVIDIA provider. `local` calls the MLX backend. `auto` lets the gateway choose. Apple can be selected by calling the gateway directly, but the lab defaults to NVIDIA or MLX for comparable worker results.

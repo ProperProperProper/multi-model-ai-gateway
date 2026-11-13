@@ -63,8 +63,9 @@ pub struct KvTelemetry {
 impl SecurityGuard {
     pub fn new() -> Self {
         Self {
-            mode: std::env::var("THOMAS_SECURITY_MODE").unwrap_or_else(|_| "observe".into()),
-            agent_mode: std::env::var("THOMAS_SECURITY_AGENT_MODE")
+            mode: std::env::var("MULTI_MODEL_GATEWAY_SECURITY_MODE")
+                .unwrap_or_else(|_| "observe".into()),
+            agent_mode: std::env::var("MULTI_MODEL_GATEWAY_SECURITY_AGENT_MODE")
                 .unwrap_or_else(|_| "guard".into()),
             prompt_length: Arc::new(Mutex::new(Baseline::default())),
             kv_norm: Arc::new(Mutex::new(Baseline::default())),
@@ -183,7 +184,16 @@ impl SecurityGuard {
             "git reset --hard",
             "git push --force",
             "curl ",
+            "wget ",
+            "fetch(",
+            "python -c",
+            "python3 -c",
+            "base64 -d",
+            "open('/",
             "security find-generic-password",
+            "ssh-keygen",
+            ".ssh/",
+            ".env",
             "chmod 777",
         ]
         .iter()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a safe, parallel Thomas AI experiment lab."""
+"""Run a safe, parallel Multi-Model AI Gateway experiment lab."""
 from __future__ import annotations
 
 import argparse
@@ -21,7 +21,7 @@ def call_gateway(gateway: str, prompt: str, provider: str, max_tokens: int = 900
         with urlopen(request, timeout=120) as response:
             payload = json.loads(response.read())
         message = payload.get("choices", [{}])[0].get("message", {})
-        return {"ok": True, "text": message.get("content") or message.get("reasoning_content") or "", "routing": payload.get("_thomas_ai", {}), "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
+        return {"ok": True, "text": message.get("content") or message.get("reasoning_content") or "", "routing": payload.get("_multi_model_gateway", {}), "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
     except Exception as error:
         return {"ok": False, "error": str(error), "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
 
@@ -39,11 +39,11 @@ def write_json(path: Path, value: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Thomas AI planner/worker/reviewer/reporter lab")
+    parser = argparse.ArgumentParser(description="Multi-Model AI Gateway planner/worker/reviewer/reporter lab")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--provider", choices=["nvidia", "local", "auto"], default="nvidia")
-    parser.add_argument("--gateway", default=os.environ.get("THOMAS_GATEWAY_URL", "http://127.0.0.1:8788"))
+    parser.add_argument("--gateway", default=os.environ.get("MULTI_MODEL_GATEWAY_URL", "http://127.0.0.1:8788"))
     parser.add_argument("--run-dir", type=Path, default=Path("lab_runs"))
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

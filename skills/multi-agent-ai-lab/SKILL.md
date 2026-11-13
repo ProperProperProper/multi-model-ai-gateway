@@ -1,6 +1,6 @@
 ---
 name: multi-agent-ai-lab
-description: Run reproducible planner, researcher, parallel-worker, reviewer, and reporter workflows through Thomas AI's local MLX or verified-free NVIDIA gateway.
+description: Run reproducible planner, researcher, parallel-worker, reviewer, and reporter workflows through the Multi-Model AI Gateway's local MLX or verified-free hosted gateway.
 metadata:
   short-description: Orchestrate safe multi-agent AI experiments
 ---
@@ -29,8 +29,8 @@ main branch / operator
 - Workers run independently and must state assumptions, evidence, and failure modes.
 - The researcher/reviewer compares outputs and flags contamination, unsupported claims, and overfitting.
 - The reporter produces a concise result plus artifacts and next actions.
-- The default backend is the local Thomas AI gateway using verified-free NVIDIA routing; use `--provider local` for MLX.
-- Runs write to an isolated artifact directory. Main-branch mutations, live trading, external GPU jobs, and paid services are never implicit.
+- The default backend is the local Multi-Model AI Gateway using verified-free hosted routing; use `--provider local` for MLX.
+- Runs write to an isolated artifact directory. Main-branch mutations, external GPU jobs, and paid services are never implicit.
 
 ## Run
 

@@ -1,8 +1,8 @@
 [package]
-name = "thomas-ai"
+name = "multi-model-ai-gateway"
 version = "0.1.0"
 edition = "2021"
-description = "Thomas AI: Apple Silicon local AI gateway with MLX, EXO/RDMA, and NVIDIA routing"
+description = "Multi-Model AI Gateway for local and hosted LLM routing on Apple Silicon"
 license = "MIT"
 keywords = ["apple-silicon", "mlx", "nvidia", "llm", "ai-gateway"]
 categories = ["command-line-utilities", "development-tools"]

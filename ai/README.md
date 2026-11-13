@@ -1,10 +1,10 @@
 # AI and machine-learning adapters
 
-Thomas AI combines three ML layers:
+Multi-Model AI Gateway combines three ML layers:
 
 1. **Deep-learning inference:** MLX runs local quantized language models, Apple Foundation Models provide Apple-native inference, and verified free NVIDIA endpoints provide stronger hosted reasoning.
-2. **Learned routing:** `ai/ml/router.py` trains a small softmax classifier from JSONL request examples. The Rust gateway can load its output with `THOMAS_ROUTER_MODEL`; health checks and load balancing still remain authoritative.
-3. **Application ML:** the same adapter boundary is intended for trading features, risk classifiers, anomaly detection, backtest diagnostics, and model evaluation.
+2. **Learned routing:** `ai/ml/router.py` trains a small softmax classifier from JSONL request examples. The Rust gateway can load its output with `MULTI_MODEL_GATEWAY_ROUTER_MODEL`; health checks and load balancing still remain authoritative.
+3. **Application ML:** the same adapter boundary can support classifiers, anomaly detection, document processing, code analysis, and model evaluation.
 
 ## Train the learned router
 
@@ -12,8 +12,8 @@ The trainer uses only the Python standard library, so it works without adding a 
 
 ```sh
 python3 ai/ml/router.py train ai/datasets/router.jsonl ai/models/router-v1.json
-THOMAS_ROUTER_MODEL="$PWD/ai/models/router-v1.json" \
-  ./target/release/thomas-ai serve
+MULTI_MODEL_GATEWAY_ROUTER_MODEL="$PWD/ai/models/router-v1.json" \
+  ./target/release/multi-model-gateway serve
 python3 ai/ml/router.py predict ai/models/router-v1.json \
   "Compare architectures and derive the failure mode step by step"
 ```
@@ -36,7 +36,7 @@ For optional outcome learning, export local-only telemetry as JSONL and run `boo
 
 ## Free NVIDIA assistance
 
-`ai/ml/llm_assist.py` can use the running Thomas AI gateway's NVIDIA provider to bootstrap labels, generate review candidates, or critique dataset examples. The gateway chooses only from the verified free NVIDIA allowlist; this script never reads or stores an NVIDIA key. Generated labels are marked `review_required: true`, and contamination/validation checks must run before training.
+`ai/ml/llm_assist.py` can use the running Multi-Model AI Gateway gateway's NVIDIA provider to bootstrap labels, generate review candidates, or critique dataset examples. The gateway chooses only from the verified free NVIDIA allowlist; this script never reads or stores an NVIDIA key. Generated labels are marked `review_required: true`, and contamination/validation checks must run before training.
 
 ```sh
 python3 ai/ml/llm_assist.py ai/datasets/router.jsonl /tmp/router-llm-labels.jsonl
@@ -52,7 +52,7 @@ Run the dependency-free stdio MCP server from an MCP-capable client:
 python3 ai/mcp_server.py
 ```
 
-It exposes `thomas_health`, `thomas_chat`, and `thomas_router_sample`. The default chat provider is NVIDIA through the local gateway; the gateway enforces the verified-free model allowlist. Pass `provider: "local"` to use MLX. The MCP process never receives an NVIDIA key.
+It exposes `gateway_health`, `gateway_chat`, and `gateway_router_sample`. The default chat provider is NVIDIA through the local gateway; the gateway enforces the verified-free model allowlist. Pass `provider: "local"` to use MLX. The MCP process never receives an NVIDIA key.
 
 ## Sample data
 
@@ -67,7 +67,7 @@ Synthetic data is for smoke tests and bootstrapping only. Review it and evaluate
 
 The multi-agent orchestration workflow is documented in [skills/multi-agent-ai-lab/SKILL.md](../skills/multi-agent-ai-lab/SKILL.md). It uses the same gateway and can run the workers on free NVIDIA endpoints or local MLX.
 
-For true local KV analysis, use the standalone [MLX Sentinel](https://github.com/ProperProperProper/mlx-sentinel). It calls `mlx_lm.generate_step`, inspects real `KVCache` tensors, returns the response with KV security metadata, and can forward aggregate telemetry to Thomas AI's `/api/security/kv` endpoint. Hosted NVIDIA and Apple calls continue to use proxy telemetry because their internal KV tensors are not exposed.
+For true local KV analysis, use the standalone [MLX Sentinel](https://github.com/ProperProperProper/mlx-sentinel). It calls `mlx_lm.generate_step`, inspects real `KVCache` tensors, returns the response with KV security metadata, and can forward aggregate telemetry to Multi-Model AI Gateway's `/api/security/kv` endpoint. Hosted NVIDIA and Apple calls continue to use proxy telemetry because their internal KV tensors are not exposed.
 
 For MLX training, retain train/validation loss per epoch and run `python3 ai/ml/monitor.py metrics.jsonl`. If validation loss worsens while training loss improves, stop and restore the best validation checkpoint. Increase data diversity before increasing model size or training steps.
 

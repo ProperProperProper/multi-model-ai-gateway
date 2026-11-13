@@ -1,4 +1,4 @@
-# KV-first security in Thomas AI
+# KV-first security in Multi-Model AI Gateway
 
 ## What this is
 
@@ -6,9 +6,9 @@ KV-first security is an inference-time security approach based on the transforme
 
 This is useful because not every attack is obvious in the visible prompt or response. Prompt injection, jailbreaks, hidden instructions, tool abuse, data exfiltration, and model drift can produce unusual internal or behavioral signals even when the text appears ordinary.
 
-## What Thomas AI implements today
+## What Multi-Model AI Gateway implements today
 
-Thomas AI cannot access raw KV tensors from hosted NVIDIA endpoints or Apple Foundation Models. The current MLX-LM server also does not expose raw KV pages through its OpenAI-compatible API. Therefore Thomas AI uses a safe proxy design today:
+Multi-Model AI Gateway cannot access raw KV tensors from hosted NVIDIA endpoints or Apple Foundation Models. The current MLX-LM server also does not expose raw KV pages through its OpenAI-compatible API. Therefore Multi-Model AI Gateway uses a safe proxy design today:
 
 ```text
 request ───────────────┐
@@ -83,14 +83,14 @@ The current guard learns a baseline for `mean_norm`, flags large norm outliers, 
 
 ```sh
 # Safe rollout: observe, never block ordinary requests.
-export THOMAS_SECURITY_MODE=observe
+export MULTI_MODEL_GATEWAY_SECURITY_MODE=observe
 
 # Protect agent actions and high-risk tool calls.
-export THOMAS_SECURITY_MODE=guard
-export THOMAS_SECURITY_AGENT_MODE=guard
+export MULTI_MODEL_GATEWAY_SECURITY_MODE=guard
+export MULTI_MODEL_GATEWAY_SECURITY_AGENT_MODE=guard
 
 # Block strong injection, jailbreak, destructive, and high-risk signals globally.
-export THOMAS_SECURITY_MODE=enforce
+export MULTI_MODEL_GATEWAY_SECURITY_MODE=enforce
 ```
 
 Inspect the current mode and counters:
@@ -113,6 +113,6 @@ This makes suspicious or unusual runs reviewable without allowing a worker to by
 
 ## Limitations
 
-This is not yet true raw-KV anomaly detection. True KV-first detection requires an inference runtime that exposes safe aggregate cache statistics. Hosted NVIDIA and Apple services cannot provide those internals to Thomas AI. The proxy guard is therefore the correct non-breaking first stage: it provides useful protection now and leaves a clean adapter boundary for native MLX instrumentation later.
+This is not yet true raw-KV anomaly detection. True KV-first detection requires an inference runtime that exposes safe aggregate cache statistics. Hosted NVIDIA and Apple services cannot provide those internals to Multi-Model AI Gateway. The proxy guard is therefore the correct non-breaking first stage: it provides useful protection now and leaves a clean adapter boundary for native MLX instrumentation later.
 
 Security decisions should be evaluated with held-out benign traffic and attack simulations. Do not train a baseline from unreviewed or contaminated traffic, and do not automatically treat model-generated labels as ground truth.

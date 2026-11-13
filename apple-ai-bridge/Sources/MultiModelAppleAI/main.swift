@@ -37,7 +37,7 @@ enum BridgeError: LocalizedError {
 }
 
 @available(macOS 27.0, *)
-enum ThomasAppleAI {
+enum MultiModelAppleAI {
     static let encoder = JSONEncoder()
 
     static func write<T: Encodable>(_ value: T) {
@@ -70,7 +70,7 @@ enum ThomasAppleAI {
         do {
             guard let prompt = request.prompt, !prompt.isEmpty else { throw BridgeError.missingPrompt }
             let mode = request.mode ?? "on_device"
-            let instructions = request.instructions ?? "You are Thomas AI's Apple-native assistant. Be concise and return useful plain text."
+            let instructions = request.instructions ?? "You are Multi-Model AI Gateway's Apple-native assistant. Be concise and return useful plain text."
             if mode == "private_cloud" {
                 let model = PrivateCloudComputeLanguageModel()
                 if model.isAvailable {
@@ -109,6 +109,6 @@ enum ThomasAppleAI {
 @main
 @available(macOS 27.0, *)
 struct Main {
-    static func main() async { await ThomasAppleAI.run() }
+    static func main() async { await MultiModelAppleAI.run() }
 }
 
