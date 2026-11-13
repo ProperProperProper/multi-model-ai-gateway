@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://properproperproper.github.io/thomas-ai-nvidia-llms-mlx-apple-ai-services/sitemap.xml
+Sitemap: https://properproperproper.github.io/multi-model-ai-gateway/sitemap.xml
