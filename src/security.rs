@@ -82,6 +82,8 @@ impl SecurityGuard {
                 || reason == "jailbreak-pattern"
                 || reason == "destructive-action-pattern"
                 || reason == "high-risk-command"
+                || reason == "ontology-type-violation"
+                || reason == "ontology-constraint-violation"
         });
         let allowed = !(enforce && (score >= 0.75 || high_signal))
             && !(guard && agent && (score >= 0.9 || high_signal));
@@ -172,6 +174,10 @@ impl SecurityGuard {
         let text = format!("{name} {args}").to_lowercase();
         let mut score = 0.0;
         let mut reasons = Vec::new();
+        if let Some(reason) = Self::ontology_violation(name, args) {
+            score = 1.0;
+            reasons.push(reason.into());
+        }
         if [
             "rm -rf",
             "git reset --hard",
@@ -191,6 +197,68 @@ impl SecurityGuard {
             reasons.push("file-write".into());
         }
         self.decision(score, reasons, true)
+    }
+
+    /// Typed logical guardrails outside the model. The model may propose a tool
+    /// call, but it cannot invent fields, roles, providers, or argument types.
+    fn ontology_violation(name: &str, args: &Value) -> Option<&'static str> {
+        let Some(object) = args.as_object() else {
+            return Some("ontology-type-violation");
+        };
+        let string_field = |key: &str| {
+            object
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+        };
+        match name {
+            "list_directory" | "read_file" => string_field("path")
+                .is_none()
+                .then_some("ontology-type-violation"),
+            "write_file" => {
+                if string_field("path").is_none()
+                    || object.get("content").and_then(Value::as_str).is_none()
+                {
+                    Some("ontology-type-violation")
+                } else if string_field("path")
+                    .is_some_and(|path| path.ends_with(".key") || path.contains(".env"))
+                {
+                    Some("ontology-constraint-violation")
+                } else {
+                    None
+                }
+            }
+            "run_command" => {
+                if string_field("command").is_none()
+                    || object.get("cwd").is_some_and(|value| !value.is_string())
+                {
+                    Some("ontology-type-violation")
+                } else {
+                    None
+                }
+            }
+            "git_status" => (!object.is_empty()).then_some("ontology-constraint-violation"),
+            "spawn_subagent" => {
+                let role = string_field("role");
+                let task = string_field("task");
+                let provider = object
+                    .get("provider")
+                    .and_then(Value::as_str)
+                    .unwrap_or("nvidia");
+                if role.is_none()
+                    || task.is_none()
+                    || !["research", "implementation", "code_review"].contains(&role.unwrap_or(""))
+                    || !["local", "nvidia", "apple"].contains(&provider)
+                {
+                    Some("ontology-type-violation")
+                } else if task.unwrap_or("").chars().count() > 12_000 {
+                    Some("ontology-constraint-violation")
+                } else {
+                    None
+                }
+            }
+            _ => Some("ontology-constraint-violation"),
+        }
     }
 
     pub fn ingest_kv(&self, telemetry: &KvTelemetry) -> Decision {

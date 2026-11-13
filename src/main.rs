@@ -24,6 +24,7 @@ use tokio::{
     time::timeout,
 };
 
+mod context;
 mod security;
 
 const LOCAL_URL: &str = "http://127.0.0.1:8080/v1";
@@ -92,6 +93,7 @@ struct AppState {
     cfg: Arc<Config>,
     router_model: Option<RouterModel>,
     security: Arc<security::SecurityGuard>,
+    context: Arc<context::ContextRegistry>,
     http: Client,
     stats: Arc<Mutex<Stats>>,
     local_inflight: Arc<std::sync::atomic::AtomicUsize>,
@@ -627,7 +629,8 @@ fn agent_tools() -> Value {
         {"type":"function","function":{"name":"read_file","description":"Read a UTF-8 text file from the local Mac.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}},
         {"type":"function","function":{"name":"write_file","description":"Write or update a UTF-8 text file on the local Mac.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}}},
         {"type":"function","function":{"name":"run_command","description":"Run a shell command as the logged-in user in the TradingSystem workspace.","parameters":{"type":"object","properties":{"command":{"type":"string"},"cwd":{"type":"string"}},"required":["command"]}}},
-        {"type":"function","function":{"name":"git_status","description":"Inspect Git status and the configured GitHub remote.","parameters":{"type":"object","properties":{}}}}
+        {"type":"function","function":{"name":"git_status","description":"Inspect Git status and the configured GitHub remote.","parameters":{"type":"object","properties":{}}}},
+        {"type":"function","function":{"name":"spawn_subagent","description":"Delegate one bounded research, implementation, or code-review task and receive a report. Subagents cannot spawn more agents.","parameters":{"type":"object","properties":{"role":{"type":"string","enum":["research","implementation","code_review"]},"task":{"type":"string"},"provider":{"type":"string","enum":["local","nvidia","apple"]}},"required":["role","task"]}}}
     ])
 }
 
@@ -788,6 +791,45 @@ async fn execute_tool(name: &str, args: &Value) -> String {
         }
     };
     output
+}
+
+async fn execute_subagent(state: &AppState, args: &Value) -> String {
+    let role = args
+        .get("role")
+        .and_then(Value::as_str)
+        .unwrap_or("research");
+    let task = args.get("task").and_then(Value::as_str).unwrap_or("");
+    if task.trim().is_empty() {
+        return "subagent rejected: task is required".into();
+    }
+    let provider = match args
+        .get("provider")
+        .and_then(Value::as_str)
+        .unwrap_or("nvidia")
+    {
+        "local" | "nvidia" | "apple" => args
+            .get("provider")
+            .and_then(Value::as_str)
+            .unwrap_or("nvidia"),
+        _ => "nvidia",
+    };
+    let bounded = task.chars().take(12_000).collect::<String>();
+    let system = format!(
+        "You are Thomas AI's bounded {role} subagent. Do not call tools or spawn agents. Return a report with role, assumptions, evidence, files inspected, proposed changes, tests, and risks. Do not claim actions you did not perform."
+    );
+    let payload = json!({"model":"auto","messages":[{"role":"system","content":system},{"role":"user","content":bounded}],"max_tokens":1200});
+    match call_upstream(state, provider, payload, None).await {
+        Ok(response) => response
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|choices| choices.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_str)
+            .unwrap_or("subagent returned no report")
+            .to_string(),
+        Err(error) => format!("subagent error: {error}"),
+    }
 }
 
 async fn call_upstream(
@@ -1047,13 +1089,15 @@ async fn agent_call(state: &AppState, provider: &str, mut payload: Value) -> Res
                     .and_then(|value| serde_json::from_str::<Value>(value).ok())
                     .unwrap_or_else(|| json!({}));
                 let decision = state.security.inspect_tool(name, &arguments);
-                let result = if decision.allowed {
-                    execute_tool(name, &arguments).await
-                } else {
+                let result = if !decision.allowed {
                     format!(
                         "security guard blocked tool call: {}",
                         serde_json::to_string(&decision).unwrap_or_default()
                     )
+                } else if name == "spawn_subagent" {
+                    execute_subagent(state, &arguments).await
+                } else {
+                    execute_tool(name, &arguments).await
                 };
                 messages.push(json!({"role":"tool","tool_call_id":id,"content":result}));
             }
@@ -1183,6 +1227,11 @@ async fn chat(
         "local"
     };
     let mut payload = serde_json::to_value(&req).unwrap_or_else(|_| json!({}));
+    if let Some(context) = state.context.render(&payload, agent, score) {
+        if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
+            messages.insert(0, json!({"role":"system","content":context}));
+        }
+    }
     if let Some(context) = workspace_context(&req) {
         if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
             messages.insert(0, json!({"role":"system","content":context}));
@@ -1345,7 +1394,7 @@ async fn models(State(state): State<AppState>) -> Json<Value> {
 async fn status(State(state): State<AppState>) -> Json<Value> {
     let stats = state.stats.lock().await;
     Json(
-        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}},"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
+        json!({"name":"Thomas AI","access_mode":"full","access_scope":"local macOS user","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
     )
 }
 
@@ -1389,6 +1438,7 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         cfg: Arc::new(config(cli.provider.clone())),
         router_model,
         security: Arc::new(security::SecurityGuard::new()),
+        context: Arc::new(context::ContextRegistry::load()),
         http: Client::builder().pool_max_idle_per_host(32).build()?,
         stats: Arc::new(Mutex::new(Stats::default())),
         local_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
