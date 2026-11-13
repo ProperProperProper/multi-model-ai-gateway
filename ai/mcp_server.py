@@ -67,7 +67,7 @@ def handle(request: dict) -> dict | None:
         return None
     if method == "tools/list":
         tools = [
-            {"name": "gateway_health", "description": "Inspect Multi-Model AI Gateway gateway, MLX, Apple, and NVIDIA status.", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "gateway_health", "description": "Inspect the Multi-Model AI Gateway, MLX, Apple, and NVIDIA status.", "inputSchema": {"type": "object", "properties": {}}},
             {"name": "gateway_chat", "description": "Chat through Multi-Model AI Gateway. NVIDIA is constrained by the gateway to verified free endpoints; local selects MLX.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
             {"name": "gateway_router_sample", "description": "Create a reviewable routing-example record; it does not train or deploy anything.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS)}}}},
         ]

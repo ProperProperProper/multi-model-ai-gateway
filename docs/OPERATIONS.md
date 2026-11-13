@@ -16,7 +16,7 @@
 
 For a local macOS deployment, configure:
 
-- `com.multi-model-ai-gateway.gateway`: `/Users/local.local/Library/LaunchAgents/com.multi-model-ai-gateway.gateway.plist`
+- `com.multi-model-ai-gateway.gateway`: `~/Library/LaunchAgents/com.multi-model-ai-gateway.gateway.plist`
 - `com.multi-model-ai-gateway.mlx`: an MLX service configured for your machine
 - gateway startup: `./target/release/multi-model-gateway serve`
 - logs: configure stdout and stderr paths in your service manager
@@ -36,7 +36,7 @@ The gateway reads the NVIDIA credential from:
 
 ```text
 macOS Keychain service: NVIDIA_API_KEY
-macOS Keychain account: local.local
+macOS Keychain account: your macOS username
 ```
 
 `NVIDIA_API_KEY` is also accepted for development. Never put a key in `.env`, source files, logs, screenshots, or Git. The API status endpoint deliberately reports only `token_exposure: never returned`.

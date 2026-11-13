@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     env, fs,
+    path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
     time::Instant,
@@ -186,6 +187,13 @@ struct ChatRequest {
     extra_body: Option<Value>,
     #[serde(flatten)]
     rest: serde_json::Map<String, Value>,
+}
+
+fn workspace_root() -> PathBuf {
+    env::var_os("MULTI_MODEL_GATEWAY_REPO_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn config(provider: String) -> Config {
@@ -552,10 +560,10 @@ async fn apple_healthy(state: &AppState) -> bool {
 }
 
 fn github_status() -> Value {
-    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
-        .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
+    let root = workspace_root();
+    let root_string = root.to_string_lossy().to_string();
     let remote = Command::new("git")
-        .args(["-C", &root, "remote", "get-url", "origin"])
+        .args(["-C", &root_string, "remote", "get-url", "origin"])
         .output()
         .ok()
         .filter(|output| output.status.success())
@@ -596,13 +604,13 @@ fn workspace_context(req: &ChatRequest) -> Option<String> {
         return None;
     }
 
-    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
-        .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
+    let root = workspace_root();
     let projects = std::path::Path::new(&root)
         .parent()
         .unwrap_or_else(|| std::path::Path::new(&root));
     let mut context = format!(
-        "Multi-Model AI Gateway full-access workspace context. The user asked about local files.\nRepository root: {root}\nProjects directory entries:\n"
+        "Multi-Model AI Gateway full-access workspace context. The user asked about local files.\nRepository root: {}\nProjects directory entries:\n",
+        root.display()
     );
     if let Ok(entries) = fs::read_dir(projects) {
         let mut names = entries
@@ -621,7 +629,11 @@ fn workspace_context(req: &ChatRequest) -> Option<String> {
         );
     }
     context.push_str("\n\nRepository files (tracked, excluding secrets):\n");
-    if let Ok(output) = Command::new("git").args(["-C", &root, "ls-files"]).output() {
+    let root_string = root.to_string_lossy().to_string();
+    if let Ok(output) = Command::new("git")
+        .args(["-C", &root_string, "ls-files"])
+        .output()
+    {
         if output.status.success() {
             let files = String::from_utf8_lossy(&output.stdout)
                 .lines()
@@ -673,8 +685,7 @@ fn agent_tools() -> Value {
 }
 
 fn allowed_path(path: &str) -> std::path::PathBuf {
-    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
-        .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
+    let root = workspace_root();
     let requested = std::path::Path::new(path);
     let root = std::path::Path::new(&root)
         .canonicalize()
@@ -699,8 +710,8 @@ fn allowed_path(path: &str) -> std::path::PathBuf {
 }
 
 fn execute_tool_sync(name: &str, args: &Value) -> String {
-    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
-        .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
+    let root = workspace_root();
+    let root_string = root.to_string_lossy().to_string();
     match name {
         "list_directory" => {
             let path = allowed_path(args.get("path").and_then(Value::as_str).unwrap_or("."));
@@ -752,10 +763,10 @@ fn execute_tool_sync(name: &str, args: &Value) -> String {
         "run_command" => "run_command is handled asynchronously".into(),
         "git_status" => {
             let status = Command::new("git")
-                .args(["-C", &root, "status", "--short", "--branch"])
+                .args(["-C", &root_string, "status", "--short", "--branch"])
                 .output();
             let remote = Command::new("git")
-                .args(["-C", &root, "remote", "-v"])
+                .args(["-C", &root_string, "remote", "-v"])
                 .output();
             format!(
                 "status:\n{}\nremote:\n{}",
@@ -792,8 +803,8 @@ async fn execute_tool(name: &str, args: &Value) -> String {
     if name != "run_command" {
         return execute_tool_sync(name, args);
     }
-    let root = env::var("MULTI_MODEL_GATEWAY_REPO_ROOT")
-        .unwrap_or_else(|_| "/Users/local.local/Projects/TradingSystem".into());
+    let root = workspace_root();
+    let root_string = root.to_string_lossy().to_string();
     if !capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_COMMANDS") {
         return "run_command denied: shell capability is disabled".into();
     }
@@ -821,7 +832,7 @@ async fn execute_tool(name: &str, args: &Value) -> String {
     }
     if lower.contains("git push") || lower.contains("git pull") || lower.contains("git fetch") {
         let remote = Command::new("git")
-            .args(["-C", &root, "remote", "get-url", "origin"])
+            .args(["-C", &root_string, "remote", "get-url", "origin"])
             .output();
         let remote = remote
             .ok()
@@ -1508,11 +1519,17 @@ async fn security_status(State(state): State<AppState>) -> Json<Value> {
 async fn security_kv(
     State(state): State<AppState>,
     Json(telemetry): Json<security::KvTelemetry>,
-) -> Json<Value> {
+) -> Result<Json<Value>, (axum::http::StatusCode, Json<Value>)> {
+    if !security::SecurityGuard::valid_kv(&telemetry) {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"error":{"message":"invalid KV telemetry"}})),
+        ));
+    }
     let decision = state.security.ingest_kv(&telemetry);
-    Json(
+    Ok(Json(
         json!({"model":telemetry.model,"pages":telemetry.pages,"cache_tokens":telemetry.cache_tokens,"decision":decision}),
-    )
+    ))
 }
 
 #[derive(Debug, Deserialize)]
