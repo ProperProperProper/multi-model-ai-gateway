@@ -11,6 +11,8 @@ permissions:
 jobs:
   rust:
     runs-on: macos-latest
+    env:
+      RUSTFLAGS: -C target-cpu=apple-m1
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
