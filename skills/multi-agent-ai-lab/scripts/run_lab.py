@@ -26,6 +26,14 @@ def call_gateway(gateway: str, prompt: str, provider: str, max_tokens: int = 900
         return {"ok": False, "error": str(error), "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
 
 
+def gateway_get(gateway: str, path: str) -> dict:
+    try:
+        with urlopen(gateway.rstrip("/") + path, timeout=10) as response:
+            return json.loads(response.read())
+    except Exception as error:
+        return {"ok": False, "error": str(error)}
+
+
 def write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
@@ -46,6 +54,7 @@ def main() -> None:
     (root / "workers").mkdir(parents=True, exist_ok=True)
     metadata = {"run_id": run_id, "prompt": args.prompt, "provider": args.provider, "workers": args.workers, "dry_run": args.dry_run, "prompt_sha256": hashlib.sha256(args.prompt.encode()).hexdigest()}
     write_json(root / "run.json", metadata)
+    write_json(root / "security.json", gateway_get(args.gateway, "/api/security"))
     plan = {"objective": args.prompt, "hypotheses": [{"id": f"H{i + 1}", "question": f"Develop and test an independent approach to: {args.prompt}", "worker": i + 1} for i in range(args.workers)], "acceptance": ["state evidence", "identify risks", "give a reversible recommendation"]}
     write_json(root / "plan.json", plan)
     if args.dry_run:

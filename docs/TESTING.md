@@ -79,3 +79,12 @@ python3 skills/multi-agent-ai-lab/scripts/run_lab.py \
 ```
 
 Remove `--dry-run` for a live run. Artifacts are isolated under `lab_runs/` and are ignored by Git.
+
+Security smoke tests:
+
+```sh
+curl -fsS http://127.0.0.1:8788/api/security
+curl -fsS -X POST http://127.0.0.1:8788/api/security/kv \
+  -H 'content-type: application/json' \
+  -d '{"model":"mlx","pages":1,"cache_tokens":8,"mean_norm":1.0,"max_norm":2.0,"attention_entropy":0.8}'
+```
