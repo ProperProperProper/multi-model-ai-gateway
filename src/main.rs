@@ -24,6 +24,8 @@ use tokio::{
     time::timeout,
 };
 
+mod security;
+
 const LOCAL_URL: &str = "http://127.0.0.1:8080/v1";
 const NVIDIA_URL: &str = "https://integrate.api.nvidia.com/v1";
 const NVIDIA_MODEL: &str = "nvidia/nemotron-3.5-lightning-30b-a3b";
@@ -89,6 +91,7 @@ enum Commands {
 struct AppState {
     cfg: Arc<Config>,
     router_model: Option<RouterModel>,
+    security: Arc<security::SecurityGuard>,
     http: Client,
     stats: Arc<Mutex<Stats>>,
     local_inflight: Arc<std::sync::atomic::AtomicUsize>,
@@ -1043,7 +1046,15 @@ async fn agent_call(state: &AppState, provider: &str, mut payload: Value) -> Res
                     .and_then(Value::as_str)
                     .and_then(|value| serde_json::from_str::<Value>(value).ok())
                     .unwrap_or_else(|| json!({}));
-                let result = execute_tool(name, &arguments).await;
+                let decision = state.security.inspect_tool(name, &arguments);
+                let result = if decision.allowed {
+                    execute_tool(name, &arguments).await
+                } else {
+                    format!(
+                        "security guard blocked tool call: {}",
+                        serde_json::to_string(&decision).unwrap_or_default()
+                    )
+                };
                 messages.push(json!({"role":"tool","tool_call_id":id,"content":result}));
             }
         }
@@ -1103,8 +1114,19 @@ async fn chat(
     headers: HeaderMap,
     Json(req): Json<ChatRequest>,
 ) -> Result<Response, (axum::http::StatusCode, Json<Value>)> {
-    let selected = requested_provider(&req, &headers, &state.cfg.provider);
     let agent = agent_enabled(&req);
+    let security = state
+        .security
+        .inspect_request(&serde_json::to_value(&req).unwrap_or_default(), agent);
+    if !security.allowed {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            Json(
+                json!({"error":{"message":"request blocked by Thomas AI security guard","security":security}}),
+            ),
+        ));
+    }
+    let selected = requested_provider(&req, &headers, &state.cfg.provider);
     let score = difficulty(&req);
     let preferred = if agent {
         // The bundled MLX model is excellent for local inference but does not
@@ -1327,6 +1349,20 @@ async fn status(State(state): State<AppState>) -> Json<Value> {
     )
 }
 
+async fn security_status(State(state): State<AppState>) -> Json<Value> {
+    Json(state.security.status())
+}
+
+async fn security_kv(
+    State(state): State<AppState>,
+    Json(telemetry): Json<security::KvTelemetry>,
+) -> Json<Value> {
+    let decision = state.security.ingest_kv(&telemetry);
+    Json(
+        json!({"model":telemetry.model,"pages":telemetry.pages,"cache_tokens":telemetry.cache_tokens,"decision":decision}),
+    )
+}
+
 async fn metrics(State(state): State<AppState>) -> Response {
     let stats = state.stats.lock().await;
     let body = format!(
@@ -1352,6 +1388,7 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         cfg: Arc::new(config(cli.provider.clone())),
         router_model,
+        security: Arc::new(security::SecurityGuard::new()),
         http: Client::builder().pool_max_idle_per_host(32).build()?,
         stats: Arc::new(Mutex::new(Stats::default())),
         local_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -1366,6 +1403,8 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             get(|| async { Json(json!({"ok":true,"service":"Thomas AI"})) }),
         )
         .route("/api/status", get(status))
+        .route("/api/security", get(security_status))
+        .route("/api/security/kv", post(security_kv))
         .route("/metrics", get(metrics))
         .route("/v1/models", get(models))
         .route("/v1/chat/completions", post(chat))
