@@ -1,0 +1,10 @@
+[
+  {"id":"core-conventions","path":"instructions/core.md","always":true,"max_chars":3500},
+  {"id":"security-rules","path":"rules/security.md","triggers":["security","credential","key","permission","delete","shell","tool"],"max_chars":3500},
+  {"id":"coding-conventions","path":"conventions/rust-python.md","triggers":["code","implement","build","fix","rust","python","test","compile"],"max_chars":3500},
+  {"id":"routing-spec","path":"specs/routing.md","triggers":["route","routing","nvidia","mlx","apple","difficulty","model"],"max_chars":3500},
+  {"id":"agent-contract","path":"skills/agent.md","triggers":["agent","subagent","research","review","implementation"],"max_chars":4000},
+  {"id":"tool-interface","path":"interfaces/tools.md","triggers":["file","repository","github","command","terminal","tool"],"max_chars":3500},
+  {"id":"mcp-interface","path":"interfaces/mcp.md","triggers":["mcp","server","context interface"],"max_chars":3000},
+  {"id":"advanced-lab","path":"skills/advanced-lab.md","triggers":["experiment","hypothesis","benchmark","evaluate"],"max_chars":3500}
+]

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://properproperproper.github.io/multi-model-ai-gateway/sitemap.xml

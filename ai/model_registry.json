@@ -1,0 +1,8 @@
+{
+  "models": [
+    {"id": "router-v1", "kind": "softmax-router", "runtime": "rust", "training": "python-standard-library", "status": "optional"},
+    {"id": "mlx-community/Qwen3-0.6B-4bit", "kind": "language-model", "runtime": "mlx", "training": "mlx-lm-lora", "status": "local"},
+    {"id": "nvidia/nemotron-3.5-lightning-30b-a3b", "kind": "language-model", "runtime": "nvidia-api", "training": "hosted", "status": "verified-free"},
+    {"id": "apple-foundation-model", "kind": "language-model", "runtime": "foundation-models", "training": "apple", "status": "device-or-private-cloud"}
+  ]
+}
