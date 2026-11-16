@@ -50,10 +50,15 @@ def call_tool(name: str, arguments: dict) -> dict:
             raise ValueError("prompt is required")
         if provider not in PROVIDERS:
             raise ValueError(f"provider must be one of {sorted(PROVIDERS)}")
+        requested_max_tokens = min(max(int(arguments.get("max_tokens", 512)), 1), 4096)
+        # The bundled MLX server accepts at most 512 output tokens. Keep the
+        # MCP contract aligned with that backend; the Rust gateway also clamps
+        # at its final upstream boundary for non-MCP clients.
+        max_tokens = min(requested_max_tokens, 512) if provider == "local" else requested_max_tokens
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": min(max(int(arguments.get("max_tokens", 512)), 1), 4096),
+            "max_tokens": max_tokens,
             "extra_body": {
                 "provider": provider,
                 "agent": False,
@@ -84,7 +89,7 @@ def handle(request: dict) -> dict | None:
     if method == "tools/list":
         tools = [
             {"name": "gateway_health", "description": "Inspect the Multi-Model AI Gateway, MLX, Apple, and NVIDIA status.", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "gateway_chat", "description": "Chat through Multi-Model AI Gateway. NVIDIA is constrained to the verified free model allowlist.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "model": {"type": "string", "description": "Optional verified model id; use auto for gateway routing."}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
+            {"name": "gateway_chat", "description": "Chat through Multi-Model AI Gateway. NVIDIA is constrained to the verified free model allowlist; explicit local MLX requests are capped at 512 output tokens.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "model": {"type": "string", "description": "Optional verified model id; use auto for gateway routing."}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
             {"name": "gateway_router_sample", "description": "Create a reviewable routing-example record; it does not train or deploy anything.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS)}}}},
         ]
         return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools}}

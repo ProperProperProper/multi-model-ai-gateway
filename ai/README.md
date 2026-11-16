@@ -54,6 +54,11 @@ python3 ai/mcp_server.py
 
 It exposes `gateway_health`, `gateway_chat`, and `gateway_router_sample`. The default chat provider is NVIDIA through the local gateway; the gateway enforces the verified-free model allowlist. Pass `provider: "local"` to use MLX. The MCP process never receives an NVIDIA key.
 
+Explicit local MLX requests are capped at the Sentinel generation ceiling (512
+tokens by default) at both the MCP and Rust upstream boundaries. This prevents
+oversized requests from becoming avoidable local backend failures; NVIDIA
+requests retain their separate hosted limit.
+
 ## Sample data
 
 Generate reviewable synthetic routing data:

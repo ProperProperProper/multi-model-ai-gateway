@@ -169,6 +169,12 @@ struct Stats {
     local_failures: u64,
     nvidia_failures: u64,
     nvidia_timeouts: u64,
+    local_last_error: Option<String>,
+    nvidia_last_error: Option<String>,
+}
+
+fn bounded_error(error: &str) -> String {
+    error.replace(['\n', '\r'], " ").chars().take(240).collect()
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -987,6 +993,13 @@ async fn call_upstream(
             body.insert("model".into(), json!(use_model));
         }
         if provider == "local" {
+            // The bundled MLX server accepts at most 512 output tokens. Clamp
+            // at the final upstream boundary so direct OpenAI-compatible
+            // clients cannot turn a harmless oversized request into a local
+            // backend failure.
+            if let Some(max_tokens) = body.get("max_tokens").and_then(Value::as_u64) {
+                body.insert("max_tokens".into(), json!(max_tokens.clamp(1, 512)));
+            }
             // Enforce bounded MLX responses at the final upstream boundary.
             // This avoids losing the hint while converting the public request
             // type and prevents controller calls from paying for hidden Qwen
@@ -1461,8 +1474,10 @@ async fn chat(
         let mut stats = state.stats.lock().await;
         if preferred == "local" {
             stats.local_failures += 1;
+            stats.local_last_error = Some(bounded_error(error));
         } else {
             stats.nvidia_failures += 1;
+            stats.nvidia_last_error = Some(bounded_error(error));
             if error.to_lowercase().contains("timeout") {
                 stats.nvidia_timeouts += 1;
             }
@@ -1612,7 +1627,7 @@ async fn graph_html(State(state): State<AppState>) -> impl IntoResponse {
 async fn metrics(State(state): State<AppState>) -> Response {
     let stats = state.stats.lock().await;
     let body = format!(
-        "# TYPE multi_model_gateway_requests_total counter\nmulti_model_gateway_requests_total{{provider=\"local\"}} {}\nmulti_model_gateway_requests_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_failures_total counter\nmulti_model_gateway_failures_total{{provider=\"local\"}} {}\nmulti_model_gateway_failures_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_timeouts_total counter\nmulti_model_gateway_timeouts_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_inflight gauge\nmulti_model_gateway_inflight{{provider=\"local\"}} {}\nmulti_model_gateway_inflight{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_last_latency_ms gauge\nmulti_model_gateway_last_latency_ms{{provider=\"local\"}} {}\nmulti_model_gateway_last_latency_ms{{provider=\"nvidia\"}} {}\n",
+        "# TYPE multi_model_gateway_requests_total counter\nmulti_model_gateway_requests_total{{provider=\"local\"}} {}\nmulti_model_gateway_requests_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_failures_total counter\nmulti_model_gateway_failures_total{{provider=\"local\"}} {}\nmulti_model_gateway_failures_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_timeouts_total counter\nmulti_model_gateway_timeouts_total{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_inflight gauge\nmulti_model_gateway_inflight{{provider=\"local\"}} {}\nmulti_model_gateway_inflight{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_last_latency_ms gauge\nmulti_model_gateway_last_latency_ms{{provider=\"local\"}} {}\nmulti_model_gateway_last_latency_ms{{provider=\"nvidia\"}} {}\n# TYPE multi_model_gateway_last_error_present gauge\nmulti_model_gateway_last_error_present{{provider=\"local\"}} {}\nmulti_model_gateway_last_error_present{{provider=\"nvidia\"}} {}\n",
         stats.local_requests,
         stats.nvidia_requests,
         stats.local_failures,
@@ -1622,6 +1637,8 @@ async fn metrics(State(state): State<AppState>) -> Response {
         state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed),
         stats.local_latency_ms,
         stats.nvidia_latency_ms,
+        u8::from(stats.local_last_error.is_some()),
+        u8::from(stats.nvidia_last_error.is_some()),
     );
     Response::builder()
         .header(header::CONTENT_TYPE, "text/plain; version=0.0.4")
