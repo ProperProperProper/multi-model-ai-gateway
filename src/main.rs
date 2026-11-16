@@ -112,6 +112,7 @@ struct AppState {
     nvidia_inflight: Arc<std::sync::atomic::AtomicUsize>,
     nvidia_health: Arc<Mutex<HealthCache>>,
     nvidia_rate: Arc<NvidiaRateLimiter>,
+    nvidia_serial: Arc<Mutex<()>>,
     apple_inflight: Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -1037,6 +1038,11 @@ async fn call_upstream(
     if provider == "apple" {
         return call_apple(state, req).await;
     }
+    let _nvidia_serial = if provider == "nvidia" {
+        Some(state.nvidia_serial.lock().await)
+    } else {
+        None
+    };
     if provider == "nvidia" {
         state.nvidia_rate.acquire().await;
     }
@@ -1206,6 +1212,11 @@ async fn stream_upstream(
             "Apple Foundation Models streaming bridge is not enabled for this request".into(),
         );
     }
+    let _nvidia_serial = if provider == "nvidia" {
+        Some(state.nvidia_serial.lock().await)
+    } else {
+        None
+    };
     if provider == "nvidia" {
         state.nvidia_rate.acquire().await;
     }
@@ -1785,6 +1796,7 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         apple_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         nvidia_health: Arc::new(Mutex::new(HealthCache::default())),
         nvidia_rate: Arc::new(NvidiaRateLimiter::new()),
+        nvidia_serial: Arc::new(Mutex::new(())),
     };
     let app = Router::new()
         .route("/", get(|| async { Html(DASHBOARD) }))
