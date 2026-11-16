@@ -687,9 +687,7 @@ fn agent_tools() -> Value {
 fn allowed_path(path: &str) -> std::path::PathBuf {
     let root = workspace_root();
     let requested = std::path::Path::new(path);
-    let root = std::path::Path::new(&root)
-        .canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from(root));
+    let root = std::path::Path::new(&root).canonicalize().unwrap_or(root);
     let candidate = if requested.is_absolute() {
         requested.to_path_buf()
     } else {
@@ -987,6 +985,16 @@ async fn call_upstream(
         };
         if provider != "nvidia" || use_model != requested_model.unwrap_or("") {
             body.insert("model".into(), json!(use_model));
+        }
+        if provider == "local" {
+            // Enforce bounded MLX responses at the final upstream boundary.
+            // This avoids losing the hint while converting the public request
+            // type and prevents controller calls from paying for hidden Qwen
+            // reasoning tokens.
+            body.insert(
+                "chat_template_kwargs".into(),
+                json!({"enable_thinking": false}),
+            );
         }
         body.insert("stream".into(), json!(false));
     }
@@ -1286,6 +1294,13 @@ async fn chat(
     }
     let selected = requested_provider(&req, &headers, &state.cfg.provider);
     let score = difficulty(&req);
+    let bounded_controller = req
+        .extra_body
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|body| body.get("bounded_controller"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let preferred = if agent {
         // The bundled MLX model is excellent for local inference but does not
         // reliably emit tool calls. Use the verified free NVIDIA Nemotron
@@ -1341,14 +1356,26 @@ async fn chat(
         "local"
     };
     let mut payload = serde_json::to_value(&req).unwrap_or_else(|_| json!({}));
-    if let Some(context) = state.context.render(&payload, agent, score) {
-        if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
-            messages.insert(0, json!({"role":"system","content":context}));
+    if !bounded_controller {
+        if let Some(context) = state.context.render(&payload, agent, score) {
+            if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
+                messages.insert(0, json!({"role":"system","content":context}));
+            }
+        }
+        if let Some(context) = workspace_context(&req) {
+            if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
+                messages.insert(0, json!({"role":"system","content":context}));
+            }
         }
     }
-    if let Some(context) = workspace_context(&req) {
-        if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
-            messages.insert(0, json!({"role":"system","content":context}));
+    // Keep bounded controller calls from spending their output budget on
+    // hidden Qwen reasoning. The direct MLX server supports this hint, so the
+    // gateway must enforce it on the local route as well; callers can still
+    // override it explicitly for ordinary interactive requests.
+    if preferred == "local" {
+        if let Value::Object(ref mut body) = payload {
+            body.entry("chat_template_kwargs")
+                .or_insert_with(|| json!({"enable_thinking": false}));
         }
     }
     if preferred == "nvidia" {
@@ -1477,6 +1504,23 @@ async fn chat(
     }
     drop(stats);
     if let Value::Object(ref mut object) = response {
+        let output_text = object
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|choices| choices.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let output_security = state.security.inspect_output(output_text, agent);
+        if !output_security.allowed {
+            return Err((
+                axum::http::StatusCode::FORBIDDEN,
+                Json(
+                    json!({"error":{"message":"model output blocked by security policy","security":output_security}}),
+                ),
+            ));
+        }
         object.insert(
             "_multi_model_gateway".into(),
             json!({"provider":used,"difficulty":score,"latency_ms":elapsed.round()}),

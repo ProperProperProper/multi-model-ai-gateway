@@ -39,7 +39,7 @@ impl GraphIndex {
             edges: Vec::new(),
         };
         let mut files = Vec::new();
-        collect_files(root, root, &mut files);
+        collect_files(root, &mut files);
         let mut symbols: HashMap<String, String> = HashMap::new();
         for path in &files {
             let relative = path
@@ -183,7 +183,7 @@ impl GraphIndex {
     }
 }
 
-fn collect_files(root: &Path, current: &Path, output: &mut Vec<PathBuf>) {
+fn collect_files(current: &Path, output: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(current) else {
         return;
     };
@@ -205,7 +205,7 @@ fn collect_files(root: &Path, current: &Path, output: &mut Vec<PathBuf>) {
             ]
             .contains(&name)
             {
-                collect_files(root, &path, output);
+                collect_files(&path, output);
             }
         } else if matches!(
             path.extension().and_then(|value| value.to_str()),
@@ -291,7 +291,7 @@ fn most_connected(graph: &GraphIndex) -> String {
         *counts.entry(&edge.to).or_default() += 1;
     }
     let mut values = counts.into_iter().collect::<Vec<_>>();
-    values.sort_by(|a, b| b.1.cmp(&a.1));
+    values.sort_by_key(|a| std::cmp::Reverse(a.1));
     values
         .into_iter()
         .take(10)

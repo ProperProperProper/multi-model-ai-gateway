@@ -143,6 +143,18 @@ impl SecurityGuard {
                 0.55,
                 "destructive-action-pattern",
             ),
+            (
+                &[
+                    "place order",
+                    "submit order",
+                    "buy shares",
+                    "sell shares",
+                    "live trading",
+                    "withdraw funds",
+                ][..],
+                1.0,
+                "trading-action-denied",
+            ),
         ] {
             if terms.iter().any(|term| lower.contains(term)) {
                 score += weight;
@@ -171,6 +183,40 @@ impl SecurityGuard {
         self.decision(score, reasons, agent)
     }
 
+    pub fn inspect_output(&self, output: &str, agent: bool) -> Decision {
+        let lower = output.to_lowercase();
+        let mut score = 0.0;
+        let mut reasons = Vec::new();
+        if agent
+            && [
+                "ignore previous instructions",
+                "ignore all instructions",
+                "system prompt",
+                "developer message",
+            ]
+            .iter()
+            .any(|term| lower.contains(term))
+        {
+            score += 0.9;
+            reasons.push("output-prompt-injection".into());
+        }
+        if [
+            "api key",
+            "private key",
+            "authorization: bearer",
+            "send this file",
+            "upload the contents",
+            "exfiltrate",
+        ]
+        .iter()
+        .any(|term| lower.contains(term))
+        {
+            score += 0.9;
+            reasons.push("output-sensitive-data-or-exfiltration".into());
+        }
+        self.decision(score, reasons, agent)
+    }
+
     pub fn inspect_tool(&self, name: &str, args: &Value) -> Decision {
         let text = format!("{name} {args}").to_lowercase();
         let mut score = 0.0;
@@ -195,12 +241,32 @@ impl SecurityGuard {
             ".ssh/",
             ".env",
             "chmod 777",
+            "security find-internet-password",
+            "security find-generic-password",
+            "launchctl",
+            "osascript",
+            "defaults write",
         ]
         .iter()
         .any(|term| text.contains(term))
         {
             score += 0.9;
             reasons.push("high-risk-command".into());
+        }
+        if [
+            "place_order",
+            "submit_order",
+            "amend_order",
+            "cancel_order",
+            "withdraw",
+            "live_trade",
+            "broker",
+        ]
+        .iter()
+        .any(|term| name.to_lowercase().contains(term) || text.contains(term))
+        {
+            score = 1.0;
+            reasons.push("trading-action-denied".into());
         }
         if name == "write_file" {
             score += 0.1;
@@ -322,6 +388,7 @@ impl SecurityGuard {
 #[cfg(test)]
 mod tests {
     use super::{KvTelemetry, SecurityGuard};
+    use serde_json::json;
 
     fn telemetry() -> KvTelemetry {
         KvTelemetry {
@@ -347,5 +414,12 @@ mod tests {
     #[test]
     fn accepts_finite_non_negative_telemetry() {
         assert!(SecurityGuard::valid_kv(&telemetry()));
+    }
+
+    #[test]
+    fn denies_trading_actions() {
+        let guard = SecurityGuard::new();
+        let decision = guard.inspect_tool("place_order", &json!({"symbol":"BHP"}));
+        assert!(!decision.allowed);
     }
 }

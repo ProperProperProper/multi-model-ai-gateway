@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 GATEWAY = os.environ.get("MULTI_MODEL_GATEWAY_URL", "http://127.0.0.1:8788").rstrip("/")
@@ -21,8 +22,13 @@ def http_json(path: str, payload: dict | None = None) -> dict:
         request = Request(GATEWAY + path)
     else:
         request = Request(GATEWAY + path, data=json.dumps(payload).encode(), headers={"content-type": "application/json"})
-    with urlopen(request, timeout=90) as response:
-        return json.loads(response.read())
+    try:
+        with urlopen(request, timeout=90) as response:
+            return json.loads(response.read())
+    except HTTPError as exc:
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        suffix = f" retry_after={retry_after}s" if retry_after else ""
+        raise RuntimeError(f"gateway_http_status={exc.code}{suffix}") from exc
 
 
 def result(text: str, structured: dict | None = None) -> dict:
@@ -39,16 +45,26 @@ def call_tool(name: str, arguments: dict) -> dict:
     if name == "gateway_chat":
         prompt = str(arguments.get("prompt", "")).strip()
         provider = str(arguments.get("provider", "nvidia"))
+        model = str(arguments.get("model", "auto"))
         if not prompt:
             raise ValueError("prompt is required")
         if provider not in PROVIDERS:
             raise ValueError(f"provider must be one of {sorted(PROVIDERS)}")
         payload = {
-            "model": "auto",
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": min(max(int(arguments.get("max_tokens", 512)), 1), 4096),
-            "extra_body": {"provider": provider, "agent": False},
+            "extra_body": {
+                "provider": provider,
+                "agent": False,
+                "bounded_controller": provider == "local",
+            },
         }
+        # Mutation workers need the final JSON object, not a long reasoning
+        # trace that consumes the output budget. NVIDIA-compatible endpoints
+        # support this template hint; providers that ignore it remain safe
+        # because the client still parses defensively and can fall back to MLX.
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
         response = http_json("/v1/chat/completions", payload)
         message = response.get("choices", [{}])[0].get("message", {})
         text = message.get("content") or message.get("reasoning_content") or json.dumps(response)
@@ -68,7 +84,7 @@ def handle(request: dict) -> dict | None:
     if method == "tools/list":
         tools = [
             {"name": "gateway_health", "description": "Inspect the Multi-Model AI Gateway, MLX, Apple, and NVIDIA status.", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "gateway_chat", "description": "Chat through Multi-Model AI Gateway. NVIDIA is constrained by the gateway to verified free endpoints; local selects MLX.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
+            {"name": "gateway_chat", "description": "Chat through Multi-Model AI Gateway. NVIDIA is constrained to the verified free model allowlist.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS), "default": "nvidia"}, "model": {"type": "string", "description": "Optional verified model id; use auto for gateway routing."}, "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096}}, "required": ["prompt"]}},
             {"name": "gateway_router_sample", "description": "Create a reviewable routing-example record; it does not train or deploy anything.", "inputSchema": {"type": "object", "properties": {"prompt": {"type": "string"}, "provider": {"type": "string", "enum": sorted(PROVIDERS)}}}},
         ]
         return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": tools}}
