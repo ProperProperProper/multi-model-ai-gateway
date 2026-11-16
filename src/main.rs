@@ -16,7 +16,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
 use tokio::{
@@ -111,6 +111,7 @@ struct AppState {
     local_inflight: Arc<std::sync::atomic::AtomicUsize>,
     nvidia_inflight: Arc<std::sync::atomic::AtomicUsize>,
     nvidia_health: Arc<Mutex<HealthCache>>,
+    nvidia_rate: Arc<NvidiaRateLimiter>,
     apple_inflight: Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -118,6 +119,59 @@ struct AppState {
 struct HealthCache {
     ok: bool,
     checked_at: Option<Instant>,
+}
+
+struct NvidiaRateState {
+    next_allowed: Instant,
+    cooldown_until: Instant,
+}
+
+struct NvidiaRateLimiter {
+    state: Mutex<NvidiaRateState>,
+    min_interval: Duration,
+    default_cooldown: Duration,
+}
+
+impl NvidiaRateLimiter {
+    fn new() -> Self {
+        let seconds = |name: &str, default: u64| {
+            env::var(name)
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(default)
+                .clamp(1, 3600)
+        };
+        Self {
+            state: Mutex::new(NvidiaRateState {
+                next_allowed: Instant::now(),
+                cooldown_until: Instant::now(),
+            }),
+            min_interval: Duration::from_secs(seconds("NVIDIA_MIN_INTERVAL_SECONDS", 30)),
+            default_cooldown: Duration::from_secs(seconds("NVIDIA_429_COOLDOWN_SECONDS", 60)),
+        }
+    }
+
+    async fn acquire(&self) {
+        loop {
+            let wait = {
+                let mut state = self.state.lock().await;
+                let now = Instant::now();
+                let allowed_at = state.next_allowed.max(state.cooldown_until);
+                if allowed_at <= now {
+                    state.next_allowed = now + self.min_interval;
+                    return;
+                }
+                allowed_at - now
+            };
+            tokio::time::sleep(wait.min(Duration::from_secs(1))).await;
+        }
+    }
+
+    async fn note_rate_limit(&self, retry_after: Option<Duration>) {
+        let cooldown = retry_after.unwrap_or(self.default_cooldown);
+        let mut state = self.state.lock().await;
+        state.cooldown_until = state.cooldown_until.max(Instant::now() + cooldown);
+    }
 }
 
 struct InflightGuard {
@@ -169,12 +223,36 @@ struct Stats {
     local_failures: u64,
     nvidia_failures: u64,
     nvidia_timeouts: u64,
+    nvidia_rate_limited: u64,
+    nvidia_last_rate_limit_unix: Option<u64>,
     local_last_error: Option<String>,
     nvidia_last_error: Option<String>,
 }
 
 fn bounded_error(error: &str) -> String {
     error.replace(['\n', '\r'], " ").chars().take(240).collect()
+}
+
+fn retry_after_duration(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|seconds| Duration::from_secs(seconds.clamp(1, 3600)))
+}
+
+fn is_rate_limited(error: &str) -> bool {
+    error.trim_start().starts_with("429:")
+}
+
+async fn record_nvidia_rate_limit(state: &AppState, retry_after: Option<Duration>) {
+    state.nvidia_rate.note_rate_limit(retry_after).await;
+    let mut stats = state.stats.lock().await;
+    stats.nvidia_rate_limited += 1;
+    stats.nvidia_last_rate_limit_unix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|value| value.as_secs());
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -959,6 +1037,9 @@ async fn call_upstream(
     if provider == "apple" {
         return call_apple(state, req).await;
     }
+    if provider == "nvidia" {
+        state.nvidia_rate.acquire().await;
+    }
     let (base, configured_model, key) = if provider == "local" {
         (&state.cfg.local_url, &state.cfg.local_model, None)
     } else {
@@ -1031,8 +1112,20 @@ async fn call_upstream(
     }
     let response = request.send().await.map_err(|e| e.to_string())?;
     let status = response.status();
+    let retry_after = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        retry_after_duration(response.headers())
+    } else {
+        None
+    };
     let text = response.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS && provider == "nvidia" {
+            record_nvidia_rate_limit(state, retry_after).await;
+            let retry_seconds = retry_after
+                .map(|value| value.as_secs())
+                .unwrap_or_else(|| state.nvidia_rate.default_cooldown.as_secs());
+            return Err(format!("429: retry_after={}s: {}", retry_seconds, text));
+        }
         return Err(format!("{}: {}", status, text));
     }
     serde_json::from_str(&text).map_err(|e| e.to_string())
@@ -1113,6 +1206,9 @@ async fn stream_upstream(
             "Apple Foundation Models streaming bridge is not enabled for this request".into(),
         );
     }
+    if provider == "nvidia" {
+        state.nvidia_rate.acquire().await;
+    }
     let (base, configured_model, key) = if provider == "local" {
         (&state.cfg.local_url, &state.cfg.local_model, None)
     } else {
@@ -1169,7 +1265,19 @@ async fn stream_upstream(
     let response = request.send().await.map_err(|error| error.to_string())?;
     if !response.status().is_success() {
         let status = response.status();
+        let retry_after = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            retry_after_duration(response.headers())
+        } else {
+            None
+        };
         let text = response.text().await.map_err(|error| error.to_string())?;
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS && provider == "nvidia" {
+            record_nvidia_rate_limit(state, retry_after).await;
+            let retry_seconds = retry_after
+                .map(|value| value.as_secs())
+                .unwrap_or_else(|| state.nvidia_rate.default_cooldown.as_secs());
+            return Err(format!("429: retry_after={}s: {}", retry_seconds, text));
+        }
         return Err(format!("{}: {}", status, text));
     }
     let stream = response
@@ -1252,7 +1360,13 @@ async fn dispatch_call(
     } else {
         call_upstream(state, provider, payload.clone(), None).await
     };
-    if result.is_err() && provider == "nvidia" {
+    if result.is_err()
+        && provider == "nvidia"
+        && !result
+            .as_ref()
+            .err()
+            .is_some_and(|error| is_rate_limited(error))
+    {
         let fallback = env::var("NVIDIA_FALLBACK_MODEL")
             .unwrap_or_else(|_| "deepseek-ai/deepseek-v4.1-flash".into());
         if fallback != state.cfg.nvidia_model {
@@ -1276,7 +1390,13 @@ async fn dispatch_stream(
     payload: Value,
 ) -> Result<Response, String> {
     let result = stream_upstream(state, provider, payload.clone(), None).await;
-    if result.is_err() && provider == "nvidia" {
+    if result.is_err()
+        && provider == "nvidia"
+        && !result
+            .as_ref()
+            .err()
+            .is_some_and(|error| is_rate_limited(error))
+    {
         let fallback = env::var("NVIDIA_FALLBACK_MODEL")
             .unwrap_or_else(|_| "nvidia/nemotron-3.5-bolt-e4b".into());
         let mut fallback_payload = payload;
@@ -1664,6 +1784,7 @@ async fn serve(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         nvidia_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         apple_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         nvidia_health: Arc::new(Mutex::new(HealthCache::default())),
+        nvidia_rate: Arc::new(NvidiaRateLimiter::new()),
     };
     let app = Router::new()
         .route("/", get(|| async { Html(DASHBOARD) }))
