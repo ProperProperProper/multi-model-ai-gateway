@@ -1,6 +1,6 @@
 # Apple AI bridge
 
-This optional Swift service exposes Apple’s Foundation Models framework to Multi-Model AI Gateway over JSON Lines. It supports the on-device Apple Foundation Model and Apple Private Cloud Compute when the Mac, OS, account, and entitlement make that model available.
+This optional Swift service exposes Apple’s Foundation Models framework to Multi-Model AI Gateway over JSON Lines. It supports the on-device Apple Foundation Model and accepts an explicit `private_cloud` compatibility mode. The public macOS SDK currently does not expose a callable Apple Private Cloud Compute model, so that mode reports cloud unavailability and safely falls back on-device.
 
 ## Build
 

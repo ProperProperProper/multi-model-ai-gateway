@@ -11,6 +11,7 @@ Article: [How the Multi-Model AI Gateway combines local and hosted AI](https://p
 
 - Native Rust gateway optimized for Apple Silicon.
 - MLX-LM local inference with automatic launchd service management.
+- Apple Foundation Models through the bundled Swift bridge, with an explicit `private_cloud` compatibility mode that reports when Apple cloud access is unavailable and falls back safely on-device.
 - Hosted routing restricted to catalog-verified free endpoints where configured.
 - Nemotron as the default NVIDIA model, with difficulty-aware model selection.
 - Load-aware routing using current local and NVIDIA in-flight requests.
