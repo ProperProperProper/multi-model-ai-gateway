@@ -37,11 +37,11 @@ The live verification matrix is:
 | Area | Expected result |
 | --- | --- |
 | Rust formatting/build/lint/tests | pass |
-| Swift bridge status and request | pass; cloud may report fallback |
+| Swift bridge status and request | pass; on-device and Private Cloud Compute are reported separately |
 | gateway | running and points at the release binary |
 | MLX direct completion | returns text, not only `/v1/models` |
 | NVIDIA direct route | returns a free-model response |
-| Apple route | returns Apple response and latency metadata |
+| Apple route | returns Apple response and latency metadata; explicit Apple failures are not silently rerouted |
 | automatic easy route | normally selects local MLX when healthy |
 | UI and CLI | serve, render, and execute bounded commands |
 | secret scan | no credentials or generated build artifacts tracked |

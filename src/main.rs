@@ -638,9 +638,32 @@ async fn apple_status(state: &AppState) -> Option<Value> {
 }
 
 async fn apple_healthy(state: &AppState) -> bool {
-    apple_status(state)
-        .await
-        .and_then(|status| status.get("ok").and_then(Value::as_bool))
+    let Some(status) = apple_status(state).await else {
+        return false;
+    };
+    let capability = if state.cfg.apple_mode == "private_cloud" {
+        "privateCloud"
+    } else {
+        "onDevice"
+    };
+    let available = status
+        .get(capability)
+        .and_then(Value::as_str)
+        .map(|value| value == "available")
+        .unwrap_or(false);
+    available
+        && (state.cfg.apple_mode != "private_cloud"
+            || status
+                .get("privateCloudEntitled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false))
+}
+
+fn apple_capability_available(status: Option<&Value>, field: &str) -> bool {
+    status
+        .and_then(|value| value.get(field))
+        .and_then(Value::as_str)
+        .map(|value| value == "available")
         .unwrap_or(false)
 }
 
@@ -1544,11 +1567,18 @@ async fn chat(
             "nvidia" if nvidia_healthy(&state).await => {
                 dispatch_stream(&state, "nvidia", payload.clone()).await
             }
+            "apple" => Err("Apple streaming is not supported by the JSON-lines bridge; use a non-streaming request".into()),
             _ => Err("selected provider is unavailable".into()),
         };
         let response = match result {
             Ok(response) => response,
             Err(first) => {
+                if selected != "auto" {
+                    return Err((
+                        axum::http::StatusCode::BAD_GATEWAY,
+                        Json(json!({"error":{"message":first}})),
+                    ));
+                }
                 let alternate = if preferred == "local" {
                     "nvidia"
                 } else {
@@ -1606,7 +1636,7 @@ async fn chat(
         if preferred == "local" {
             stats.local_failures += 1;
             stats.local_last_error = Some(bounded_error(error));
-        } else {
+        } else if preferred == "nvidia" {
             stats.nvidia_failures += 1;
             stats.nvidia_last_error = Some(bounded_error(error));
             if error.to_lowercase().contains("timeout") {
@@ -1617,6 +1647,12 @@ async fn chat(
     let (mut response, used) = match result {
         Ok(value) => (value, preferred),
         Err(first) => {
+            if selected != "auto" {
+                return Err((
+                    axum::http::StatusCode::BAD_GATEWAY,
+                    Json(json!({"error":{"message":first}})),
+                ));
+            }
             let can_try = alternate == "local" && local_healthy(&state).await
                 || alternate == "nvidia" && nvidia_healthy(&state).await
                 || alternate == "apple" && apple_healthy(&state).await;
@@ -1644,7 +1680,7 @@ async fn chat(
     if used == "local" {
         stats.local_requests += 1;
         stats.local_latency_ms = elapsed;
-    } else {
+    } else if used == "nvidia" {
         stats.nvidia_requests += 1;
         stats.nvidia_latency_ms = elapsed;
     }
@@ -1697,8 +1733,20 @@ async fn models(State(state): State<AppState>) -> Json<Value> {
 
 async fn status(State(state): State<AppState>) -> Json<Value> {
     let stats = state.stats.lock().await;
+    let apple_bridge = apple_status(&state).await;
+    let apple_on_device = apple_capability_available(apple_bridge.as_ref(), "onDevice");
+    let apple_private_cloud = apple_capability_available(apple_bridge.as_ref(), "privateCloud");
+    let apple_private_cloud_entitled = apple_bridge
+        .as_ref()
+        .and_then(|status| status.get("privateCloudEntitled").and_then(Value::as_bool))
+        .unwrap_or(false);
+    let apple_healthy = if state.cfg.apple_mode == "private_cloud" {
+        apple_private_cloud && apple_private_cloud_entitled
+    } else {
+        apple_on_device
+    };
     Json(
-        json!({"name":"Multi-Model AI Gateway","access_mode":env::var("MULTI_MODEL_GATEWAY_ACCESS_MODE").unwrap_or_else(|_| "readonly".into()),"agent_tools":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_AGENT_TOOLS"),"file_writes":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_FILE_WRITES"),"shell_commands":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_COMMANDS"),"access_scope":"repository-only when tools are enabled","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"graphify":{"nodes":state.graph.nodes.len(),"edges":state.graph.edges.len(),"query":"POST /api/graph/query","html":"/graph.html"},"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy(&state).await,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
+        json!({"name":"Multi-Model AI Gateway","access_mode":env::var("MULTI_MODEL_GATEWAY_ACCESS_MODE").unwrap_or_else(|_| "readonly".into()),"agent_tools":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_AGENT_TOOLS"),"file_writes":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_FILE_WRITES"),"shell_commands":capability_enabled("MULTI_MODEL_GATEWAY_ENABLE_COMMANDS"),"access_scope":"repository-only when tools are enabled","repository":github_status(),"routing":"difficulty_and_load","learned_router":state.router_model.is_some(),"local_max_difficulty":state.cfg.local_max_difficulty,"context_engineering":state.context.status(),"graphify":{"nodes":state.graph.nodes.len(),"edges":state.graph.edges.len(),"query":"POST /api/graph/query","html":"/graph.html"},"backends":{"mlx":{"url":state.cfg.local_url,"healthy":local_healthy(&state).await,"model":state.cfg.local_model,"inflight":state.local_inflight.load(std::sync::atomic::Ordering::Relaxed)},"apple":{"healthy":apple_healthy,"on_device_available":apple_on_device,"private_cloud_available":apple_private_cloud,"private_cloud_entitled":apple_private_cloud_entitled,"mode":state.cfg.apple_mode,"bridge":state.cfg.apple_bin,"inflight":state.apple_inflight.load(std::sync::atomic::Ordering::Relaxed)},"nvidia":{"url":state.cfg.nvidia_url,"configured":nvidia_healthy(&state).await,"model":state.cfg.nvidia_model,"fast_model":state.cfg.nvidia_fast_model,"hard_model":state.cfg.nvidia_hard_model,"free_models":state.cfg.nvidia_free_models,"inflight":state.nvidia_inflight.load(std::sync::atomic::Ordering::Relaxed)}} ,"exo":{"url":env::var("EXO_BASE_URL").unwrap_or_default(),"rdma":"MLX JACCL over Thunderbolt 5"},"stats":&*stats}),
     )
 }
 

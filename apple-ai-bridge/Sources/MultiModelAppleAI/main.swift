@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import Security
 
 @available(macOS 26.0, *)
 struct Request: Decodable {
@@ -21,6 +22,7 @@ struct StatusReply: Encodable {
     let ok: Bool
     let onDevice: String
     let privateCloud: String
+    let privateCloudEntitled: Bool
 }
 
 @available(macOS 26.0, *)
@@ -53,9 +55,33 @@ enum MultiModelAppleAI {
         }
     }
 
+    @available(macOS 27.0, *)
+    static func privateCloudAvailability(_ value: PrivateCloudComputeLanguageModel.Availability) -> String {
+        switch value {
+        case .available: return "available"
+        case .unavailable(let reason): return "unavailable:\(String(describing: reason))"
+        }
+    }
+
+    @available(macOS 27.0, *)
+    static func privateCloudEntitled() -> Bool {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let value = SecTaskCopyValueForEntitlement(
+                task,
+                "com.apple.developer.private-cloud-compute" as CFString,
+                nil
+              ) as? Bool else { return false }
+        return value
+    }
+
     static func status() {
         let local = SystemLanguageModel.default
-        write(StatusReply(ok: true, onDevice: availability(local.availability), privateCloud: "unavailable: not exposed by the installed Foundation Models SDK"))
+        if #available(macOS 27.0, *) {
+            let cloud = PrivateCloudComputeLanguageModel()
+            write(StatusReply(ok: true, onDevice: availability(local.availability), privateCloud: privateCloudAvailability(cloud.availability), privateCloudEntitled: privateCloudEntitled()))
+        } else {
+            write(StatusReply(ok: true, onDevice: availability(local.availability), privateCloud: "unavailable: requires macOS 27", privateCloudEntitled: false))
+        }
     }
 
     static func respond(_ request: Request) async {
@@ -63,15 +89,25 @@ enum MultiModelAppleAI {
             guard let prompt = request.prompt, !prompt.isEmpty else { throw BridgeError.missingPrompt }
             let mode = request.mode ?? "on_device"
             let instructions = request.instructions ?? "You are Multi-Model AI Gateway's Apple-native assistant. Be concise and return useful plain text."
-            // The public macOS 26 SDK does not expose Private Cloud Compute.
-            // Keep private_cloud requests compatible by falling back locally.
-            let model = SystemLanguageModel.default
-            guard model.availability == .available else { throw BridgeError.unavailable("Apple on-device Foundation Model is unavailable: \(availability(model.availability))") }
-            let session = LanguageModelSession(model: model, instructions: instructions)
+            let session: LanguageModelSession
+            let provider: String
+            if mode == "private_cloud" {
+                guard #available(macOS 27.0, *) else { throw BridgeError.unavailable("Apple Private Cloud Compute requires macOS 27") }
+                guard MultiModelAppleAI.privateCloudEntitled() else { throw BridgeError.unavailable("Apple Private Cloud Compute entitlement is not present on this executable") }
+                let model = PrivateCloudComputeLanguageModel()
+                guard model.isAvailable else { throw BridgeError.unavailable("Apple Private Cloud Compute is unavailable: \(privateCloudAvailability(model.availability))") }
+                session = LanguageModelSession(model: model, instructions: instructions)
+                provider = "apple-private-cloud"
+            } else {
+                let model = SystemLanguageModel.default
+                guard model.availability == .available else { throw BridgeError.unavailable("Apple on-device Foundation Model is unavailable: \(availability(model.availability))") }
+                session = LanguageModelSession(model: model, instructions: instructions)
+                provider = "apple-foundation-model"
+            }
             let text = try await session.respond(to: prompt).content
-            write(Reply(ok: true, provider: mode == "private_cloud" ? "apple-foundation-model-fallback" : "apple-foundation-model", text: text, error: nil))
+            write(Reply(ok: true, provider: provider, text: text, error: nil))
         } catch {
-            write(Reply(ok: false, provider: "apple", text: nil, error: error.localizedDescription))
+            write(Reply(ok: false, provider: "apple", text: nil, error: "\(error.localizedDescription) [\(String(describing: error))]"))
         }
     }
 

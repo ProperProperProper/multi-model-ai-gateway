@@ -12,8 +12,8 @@ Browser / CLI / OpenAI client
    MLX     Apple   NVIDIA
   :8080   Swift    NIM API
             |
-            +-- private_cloud compatibility mode
-            +-- on-device Foundation Models implementation
+            +-- Private Cloud Compute when available
+            +-- on-device Foundation Models when explicitly selected
 ```
 
 ## Routing
@@ -26,7 +26,7 @@ Requests can select `local`, `apple`, `nvidia`, or `auto` through `extra_body.pr
 - harder requests: prefer NVIDIA;
 - agent/tool requests: prefer NVIDIA as the planner, while tools execute locally;
 - backend failure: retry on the configured alternate backend;
-- Apple is explicit-select or an available alternate. `private_cloud` is represented in the request contract, but the public macOS SDK currently exposes no callable Private Cloud Compute model; the bridge reports that state and uses on-device inference.
+- Apple is explicit-select or an available alternate. On macOS 27 or later, `private_cloud` uses Apple's `PrivateCloudComputeLanguageModel`; on-device inference is a separate explicit mode. The gateway reports each capability independently.
 
 NVIDIA model selection is difficulty-aware:
 

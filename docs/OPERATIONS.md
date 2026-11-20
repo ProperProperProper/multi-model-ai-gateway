@@ -63,5 +63,5 @@ Train and validate a router outside the gateway, then set `MULTI_MODEL_GATEWAY_R
 
 ## Apple failures
 
-The Swift bridge reports on-device and Private Cloud availability. A Private Cloud session may still fail at runtime because Apple has not provisioned the session assets; the bridge automatically falls back to on-device Foundation Models. This is reported in the response model name as `apple-foundation-model-fallback`.
+The Swift bridge reports on-device and Private Cloud availability separately. On macOS 27, `private_cloud` requests use `PrivateCloudComputeLanguageModel` directly and never silently fall back to the on-device model. The device must be eligible and the Apple Private Cloud Compute entitlement/session must be provisioned; otherwise the request returns a clear error and the gateway can choose another provider.
 
