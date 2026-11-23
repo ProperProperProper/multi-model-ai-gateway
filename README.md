@@ -52,7 +52,7 @@ cargo build --release
 open http://127.0.0.1:8788
 ```
 
-For persistent local services, configure your own LaunchAgent or run the gateway directly. The gateway reads the NVIDIA key from Keychain service `NVIDIA_API_KEY`, account `your-macos-username`, by default. No key is stored in this repository.
+For persistent local services, configure your own LaunchAgent or run the gateway directly. The gateway reads the NVIDIA key from Keychain service `NVIDIA_API_KEY`; set `NVIDIA_KEYCHAIN_ACCOUNT` locally when your Keychain requires an account name. No key or account identifier is stored in this repository.
 
 The gateway can run as a standalone release binary. For persistent services, use the service manager appropriate to your operating system.
 
